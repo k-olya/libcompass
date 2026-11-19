@@ -1,30 +1,31 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Circle, Face, Memo, Node, Sketch, Solid, Transform, } from 'libcompass';
+import { Circle, Edge, Face, Memo, Node, Sketch, Solid, Transform, } from 'libcompass';
 
 class CountingFace extends Face {
   calls = 0;
 
-  triangulate() {
+  mesh(context) {
     this.calls++;
-    return super.triangulate();
+    return super.mesh(context);
   }
 }
 
-const triangle = (z = 0) => new CountingFace({ outer: [
-  { position: [0, 0, z] }, { position: [1, 0, z] }, { position: [0, 1, z] },
-] });
+const triangle = (z = 0) => {
+  const vertices = [{ position: [0, 0, z] }, { position: [1, 0, z] }, { position: [0, 1, z] }];
+  return new CountingFace({ outer: vertices.map((start, i) => new Edge({ start, end: vertices[(i + 1) % 3] })) });
+};
 
 test('solids are memoized nodes with lazy triangulation and preserved topology', () => {
   const face = triangle();
   const faces = [face];
-  const solid = new Solid({ faces });
+  const solid = new Solid({ surfaces: faces });
   assert.ok(solid instanceof Node);
   assert.ok(solid instanceof Memo);
-  assert.notEqual(solid.faces, faces);
-  assert.equal(solid.faces[0], face);
+  assert.notEqual(solid.surfaces, faces);
+  assert.equal(solid.surfaces[0], face);
   face.vertices.forEach((vertex, i) => assert.equal(solid.vertices[i], vertex));
-  face.edges.forEach((edge, i) => assert.equal(solid.edges[i], edge));
+  face.boundaries.forEach((edge, i) => assert.equal(solid.boundaries[i], edge));
   assert.equal(face.calls, 0);
   const first = solid.triangulate();
   assert.equal(face.calls, 1);
@@ -35,14 +36,14 @@ test('solids are memoized nodes with lazy triangulation and preserved topology',
   assert.equal(face.calls, 2);
   assert.notEqual(next, first);
   assert.deepEqual(next, first);
-  const empty = new Solid({ faces: [] });
+  const empty = new Solid({ surfaces: [] });
   const positions = empty.triangulate();
   assert.deepEqual(positions, new Float32Array());
   assert.equal(empty.triangulate(), positions);
 });
 
 test('extruded solids can be added directly to scenes and transforms', () => {
-  const solid = new Sketch().add(new Circle({ center: { x: 0, y: 0 }, radius: 5 })).extrude({ direction: [0, 0, 10], circleSegments: 12 });
+  const solid = new Sketch().add(new Circle({ center: { x: 0, y: 0 }, radius: 5 })).extrude({ direction: [0, 0, 10] });
   const original = solid.triangulate();
   const scene = new Node().add(solid);
   assert.deepEqual(scene.triangulate(), original);
@@ -57,8 +58,8 @@ test('extruded solids can be added directly to scenes and transforms', () => {
 });
 
 test('solid children contribute geometry and refresh affects only the requested cache', () => {
-  const solid = new Solid({ faces: [triangle()] });
-  const child = new Solid({ faces: [triangle(2)] });
+  const solid = new Solid({ surfaces: [triangle()] });
+  const child = new Solid({ surfaces: [triangle(2)] });
   const root = new Memo().add(solid);
   const original = solid.triangulate();
   const rootOriginal = root.triangulate();
@@ -69,7 +70,7 @@ test('solid children contribute geometry and refresh affects only the requested 
   const combined = solid.triangulate();
   const childPositions = child.triangulate();
   assert.deepEqual(combined, new Float32Array([...original, ...childPositions]));
-  assert.equal(solid.faces.length, 1);
+  assert.equal(solid.surfaces.length, 1);
   assert.equal(solid.vertices.length, 3);
   root.refresh();
   assert.deepEqual(root.triangulate(), combined);

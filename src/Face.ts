@@ -1,115 +1,123 @@
 import { vec3 } from 'gl-matrix';
 import { Edge } from './Edge.js';
 import { Plane } from './Plane.js';
-import { validateVertex, type Vertex } from './Vertex.js';
-import { signedArea, triangulatePolygon } from './util/polygon.js';
+import { SpatialCurve } from './SpatialCurve.js';
+import type { SpatialBoundary } from './SpatialBoundary.js';
+import { Surface } from './Surface.js';
+import type { Vertex } from './Vertex.js';
+import { orientLoop, sampleLoop } from './util/boundaryLoops.js';
+import { signedArea, triangulatePolygon, validateLoops } from './util/polygon.js';
+import type { Tessellation } from './util/Tessellation.js';
 
 /**
- * An oriented planar face with an outer boundary and optional holes.
+ * A planar surface trimmed by exact edges and spatial curves.
  *
  * @remarks
- * Boundary arrays are copied while vertex and supplied edge identities are
- * retained. Treat coordinates and topology as immutable: triangulation
- * connectivity is computed during construction.
+ * Trim objects retain their identities. Curves are sampled only during
+ * triangulation; constructing a face does not create triangle connectivity.
+ * Only Face, rather than SpatialSurface, can supply a sketch plane.
  */
-export class Face {
-  /** Ordered outer boundary, without repeating the closing vertex. */
-  readonly outer: readonly Vertex[];
-  /** Disjoint hole boundaries, each without a repeated closing vertex. */
-  readonly holes: readonly (readonly Vertex[])[];
-  /** Boundary vertices flattened in outer-then-holes order. */
-  readonly vertices: readonly Vertex[];
-  /** Boundary edges in the same loop order; excludes triangulation diagonals. */
-  readonly edges: readonly Edge[];
-  /** Local frame whose normal follows the outer boundary's winding. */
+export class Face extends Surface {
+  /** Oriented local frame; triangle winding follows its normal. */
   readonly plane: Plane;
-  private readonly triangles: readonly number[];
 
   /**
-   * Create and validate a planar face.
+   * Create a planar face from ordered, closed boundary loops.
    *
-   * @remarks
-   * The outer loop needs at least three noncollinear vertices. Holes must be
-   * simple, disjoint, and strictly inside it; they default to an empty array.
-   * Supplied edges must match successive loop vertices in either direction.
-   * Omit edges to create new boundary edges.
-   *
-   * @param options - Outer loop, optional disjoint hole loops, and optional shared
-   * edges in outer-then-holes order. Outer winding determines face orientation.
-   * @throws {@link RangeError} if the boundaries are degenerate, nonplanar,
-   * intersecting, touching, or incorrectly nested; edges do not match; or
-   * triangulation fails at the current numeric tolerance.
+   * @param options - Outer trim, optional holes, and optional oriented plane.
+   * Without a plane, orientation follows the outer trim's traversal.
+   * @throws {@link RangeError} if trims are open, degenerate, or nonplanar.
+   * Curved trim separation and tessellation are checked when triangulating.
    */
-  constructor({ outer, holes = [], edges }: {
-    outer: readonly Vertex[]; holes?: readonly (readonly Vertex[])[]; edges?: readonly Edge[];
+  constructor({ outer, holes = [], plane }: {
+    outer: readonly SpatialBoundary[];
+    holes?: readonly (readonly SpatialBoundary[])[];
+    plane?: Plane;
   }) {
-    if (outer.length < 3) throw new RangeError('A face needs at least three outer vertices');
-    this.outer = [...outer];
-    this.holes = holes.map((hole) => [...hole]);
-    const loops = [this.outer, ...this.holes];
-    this.vertices = loops.flat();
-    this.vertices.forEach(validateVertex);
-
-    let plane: Plane | undefined;
-    for (let i = 1; i + 1 < outer.length; i++) {
-      const a = vec3.subtract([0, 0, 0], outer[i].position, outer[0].position);
-      const b = vec3.subtract([0, 0, 0], outer[i + 1].position, outer[0].position);
-      if (vec3.length(vec3.cross([0, 0, 0], a, b)) > 0) {
-        const candidate = new Plane({ a: outer[0], b: outer[i], c: outer[i + 1] });
-        // A concave boundary can begin with a reflex corner. Orient the frame
-        // using the entire loop, rather than just its first noncollinear triple.
-        plane = signedArea(outer.map((vertex) => candidate.toLocal(vertex))) > 0
-          ? candidate : new Plane({ a: outer[0], b: outer[i + 1], c: outer[i] });
-        break;
+    super({ outer, holes });
+    const anchors = (loop: readonly SpatialBoundary[]) => orientLoop(loop).flatMap(({ boundary, reversed }) => {
+      const parameters = boundary instanceof SpatialCurve ? [0, 0.25, 0.5, 0.75] : [0];
+      return parameters.map(t => boundary.at(reversed ? 1 - t : t));
+    });
+    const points = anchors(this.outer);
+    if (!plane) {
+      for (let i = 1; i + 1 < points.length; i++) {
+        const a = vec3.subtract([0, 0, 0], points[i].position, points[0].position);
+        const b = vec3.subtract([0, 0, 0], points[i + 1].position, points[0].position);
+        if (vec3.length(vec3.cross([0, 0, 0], a, b)) > 0) {
+          const frame = new Plane({ a: points[0], b: points[i], c: points[i + 1] });
+          plane = signedArea(points.map(point => frame.toLocal(point))) > 0
+            ? frame : new Plane({ a: points[0], b: points[i + 1], c: points[i] });
+          break;
+        }
       }
     }
-    if (!plane) throw new RangeError('A face needs noncollinear vertices');
+    if (!plane) throw new RangeError('A face needs a nondegenerate planar boundary');
     this.plane = plane;
-    this.triangles = triangulatePolygon(loops.map((loop) => loop.map((vertex) => this.plane.toLocal(vertex))));
-
-    const boundaries = loops.flatMap((loop) => loop.map((start, i) => [start, loop[(i + 1) % loop.length]] as const));
-    if (edges && (edges.length !== boundaries.length || boundaries.some(([a, b], i) =>
-      !((edges[i].start === a && edges[i].end === b) || (edges[i].start === b && edges[i].end === a))))) {
-      throw new RangeError('Face edges must match its boundary vertices');
+    const loops = [this.outer, ...this.holes];
+    for (const loop of loops) anchors(loop).forEach(vertex => this.plane.toLocal(vertex));
+    if (this.boundaries.every(boundary => boundary instanceof Edge)) {
+      const polygons = loops.map(loop => anchors(loop).map(vertex => this.plane.toLocal(vertex)));
+      validateLoops(polygons);
     }
-    this.edges = edges ? [...edges] : boundaries.map(([a, b]) => new Edge({ start: a, end: b }));
   }
 
-  /**
-   * Tessellate this face, excluding its holes.
-   *
-   * @returns A fresh array of world-space XYZ triangle positions, nine floats
-   * per triangle, wound consistently with the face plane's normal.
-   */
-  triangulate(): Float32Array {
-    const positions = new Float32Array(this.triangles.length * 3);
-    this.triangles.forEach((index, i) => positions.set(this.vertices[index].position, i * 3));
+  protected override prepare(context: Tessellation): void {
+    // Exact circular clearances prevent a valid narrow gap from being crossed by chords.
+    for (const boundary of this.boundaries) {
+      if (!(boundary instanceof SpatialCurve) || !boundary.circle || !boundary.plane) continue;
+      const center = this.plane.toLocal(boundary.plane.toWorld(boundary.circle.center));
+      const radius = boundary.circle.radius;
+      for (const other of this.boundaries) {
+        if (other === boundary) continue;
+        let gap: number | undefined;
+        if (other instanceof SpatialCurve && other.circle && other.plane) {
+          const otherCenter = this.plane.toLocal(other.plane.toWorld(other.circle.center));
+          const distance = Math.hypot(center.x - otherCenter.x, center.y - otherCenter.y);
+          gap = Math.max(distance - radius - other.circle.radius, Math.abs(radius - other.circle.radius) - distance);
+        } else if (other instanceof Edge) {
+          const a = this.plane.toLocal(other.start), b = this.plane.toLocal(other.end);
+          const dx = b.x - a.x, dy = b.y - a.y;
+          const t = Math.max(0, Math.min(1, ((center.x - a.x) * dx + (center.y - a.y) * dy) / (dx * dx + dy * dy)));
+          const closest = Math.hypot(a.x + dx * t - center.x, a.y + dy * t - center.y);
+          const farthest = Math.max(Math.hypot(a.x - center.x, a.y - center.y), Math.hypot(b.x - center.x, b.y - center.y));
+          gap = Math.max(closest - radius, radius - farthest);
+        }
+        if (gap !== undefined && gap > 0) context.requestResolution(boundary, gap / 4);
+      }
+    }
+  }
+
+  protected override mesh(context: Tessellation): Float32Array {
+    const loops = [this.outer, ...this.holes].map(loop => sampleLoop(loop, context));
+    const polygons = loops.map(loop => loop.map(vertex => this.plane.toLocal(vertex)));
+    const triangles = triangulatePolygon(polygons);
+    const points = loops.flat();
+    // The supplied plane controls orientation even if a shared loop runs backwards.
+    if (signedArea(polygons[0]) < 0) {
+      for (let i = 0; i < triangles.length; i += 3) [triangles[i + 1], triangles[i + 2]] = [triangles[i + 2], triangles[i + 1]];
+    }
+    const positions = new Float32Array(triangles.length * 3);
+    triangles.forEach((index, i) => positions.set(points[index].position, i * 3));
     return positions;
   }
 }
 
 /**
- * Create and validate a planar face.
+ * Create a planar face from ordered, closed boundary loops.
  *
  * Constructor shorthand for `new Face(options)`; returns a new {@link Face} instance.
  *
- * @remarks
- * The outer loop needs at least three noncollinear vertices. Holes must be
- * simple, disjoint, and strictly inside it; they default to an empty array.
- * Supplied edges must match successive loop vertices in either direction.
- * Omit edges to create new boundary edges.
- *
- * @param options - Outer loop, optional disjoint hole loops, and optional shared
- * edges in outer-then-holes order. Outer winding determines face orientation.
- * @throws {@link RangeError} if the boundaries are degenerate, nonplanar,
- * intersecting, touching, or incorrectly nested; edges do not match; or
- * triangulation fails at the current numeric tolerance.
+ * @param options - Outer trim, optional holes, and optional oriented plane.
+ * Without a plane, orientation follows the outer trim's traversal.
+ * @throws {@link RangeError} if trims are open, degenerate, or nonplanar.
+ * Curved trim separation and tessellation are checked when triangulating.
  */
 export function face(options: {
-  /** Ordered outer boundary of at least three noncollinear vertices, without a repeated closing vertex. Winding determines orientation. */
-  outer: readonly Vertex[];
-  /** Disjoint hole loops strictly inside the outer boundary, without repeated closing vertices; defaults to an empty array. */
-  holes?: readonly (readonly Vertex[])[];
-  /** Shared edges in outer-then-holes order, matching successive vertices in either direction. Omit to create new boundary edges. */
-  edges?: readonly Edge[];
+  /** Ordered, closed outer loop of shared edges and spatial curves. */
+  outer: readonly SpatialBoundary[];
+  /** Ordered, closed hole loops; defaults to none. */
+  holes?: readonly (readonly SpatialBoundary[])[];
+  /** Optional oriented frame; inferred from the outer loop when omitted. */
+  plane?: Plane;
 }): Face { return new Face(options); }

@@ -27,9 +27,11 @@
     "prepack": "npm run build"
   },
   "dependencies": {
+    "earcut": "^3.0.2",
     "gl-matrix": "^3.4.4"
   },
   "devDependencies": {
+    "@types/earcut": "^3.0.0",
     "typescript": "^5.9.3"
   }
 }

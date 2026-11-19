@@ -1,4 +1,5 @@
-import { validatePoint, type Point } from '../Point.js';
+import type { Point } from '../Point.js';
+import earcut from 'earcut';
 
 type Loop = readonly Point[];
 
@@ -117,8 +118,8 @@ export function validateLoops(loops: readonly Loop[]): void {
  * @remarks
  * The first loop is the outer boundary. Remaining loops must be disjoint holes
  * strictly inside it, with no nested holes. Their winding does not matter.
- * Greedy planar triangulation uses O(n³) work and O(n²) storage for n vertices,
- * with scale-relative numeric tolerances.
+ * Ear clipping handles dense curved trims. Validation uses scale-relative
+ * numeric tolerances and preserves collinear topological boundary vertices.
  *
  * @param loops - Outer boundary followed by holes, without repeated closing points.
  * @returns Flat groups of three indices addressing `loops.flat()`. Triangle
@@ -137,54 +138,40 @@ export function triangulatePolygon(loops: readonly Loop[]): number[] {
     }
   }
   const points = loops.flat(), tolerance = tolerances(loops);
-  const inside = (p: Point) => containsPoint(outer, p) && !holes.some((hole) => containsPoint(hole, p));
-  const edges: [number, number][] = [];
-  const adjacent = points.map(() => new Set<number>());
-  const add = (a: number, b: number) => {
-    edges.push([a, b]); adjacent[a].add(b); adjacent[b].add(a);
-  };
-  let offset = 0;
-  for (const loop of loops) {
-    for (let i = 0; i < loop.length; i++) add(offset + i, offset + (i + 1) % loop.length);
-    offset += loop.length;
-  }
+  const holeIndices: number[] = [];
+  let offset = outer.length;
+  for (const hole of holes) { holeIndices.push(offset); offset += hole.length; }
+  let triangles = earcut(points.flatMap(point => [point.x, point.y]), holeIndices);
 
-  // ponytail: O(n^3) greedy planar triangulation; use a faster constrained
-  // triangulator if large sketches make this a bottleneck.
-  const candidates: { a: number; b: number; length: number }[] = [];
-  for (let a = 0; a < points.length; a++) {
-    for (let b = a + 1; b < points.length; b++) {
-      if (!adjacent[a].has(b)) candidates.push({ a, b, length: Math.hypot(points[b].x - points[a].x, points[b].y - points[a].y) });
-    }
-  }
-  candidates.sort((a, b) => a.length - b.length);
-  for (const { a, b } of candidates) {
-    const start = points[a], end = points[b];
-    if (!inside(validatePoint({ x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }))) continue;
-    if (points.some((p, i) => i !== a && i !== b && onSegment(start, end, p, tolerance.length, tolerance.area))) continue;
-    if (edges.some(([c, d]) => c !== a && c !== b && d !== a && d !== b &&
-        intersects(start, end, points[c], points[d], tolerance.length, tolerance.area))) continue;
-    add(a, b);
-  }
-
-  const triangles: number[] = [];
-  let area = 0;
-  for (let a = 0; a < points.length; a++) {
-    for (const b of adjacent[a]) {
-      if (b <= a) continue;
-      for (const c of adjacent[b]) {
-        if (c <= b || !adjacent[a].has(c)) continue;
-        const signed = cross(points[a], points[b], points[c]);
-        if (Math.abs(signed) <= tolerance.area) continue;
-        const order = signed > 0 ? [a, b, c] : [a, c, b];
-        const [p, q, r] = order.map((i) => points[i]);
-        if (!inside(validatePoint({ x: (p.x + q.x + r.x) / 3, y: (p.y + q.y + r.y) / 3 }))) continue;
-        if (points.some((s, i) => i !== a && i !== b && i !== c &&
-            cross(p, q, s) > tolerance.area && cross(q, r, s) > tolerance.area && cross(r, p, s) > tolerance.area)) continue;
-        triangles.push(...(signedArea(outer) > 0 ? order : order.reverse()));
-        area += Math.abs(signed) / 2;
+  // Earcut may filter collinear vertices when bridging holes. Split triangle
+  // edges at any omitted boundary vertices so cap and side meshes still meet.
+  const used = new Set(triangles);
+  points.forEach((point, index) => {
+    if (used.has(index)) return;
+    let inserted = false;
+    const result: number[] = [];
+    for (let i = 0; i < triangles.length; i += 3) {
+      const triangle = triangles.slice(i, i + 3);
+      const edge = triangle.findIndex((a, j) => onSegment(points[a], points[triangle[(j + 1) % 3]], point, tolerance.length, tolerance.area));
+      if (edge === -1) result.push(...triangle);
+      else {
+        const a = triangle[edge], b = triangle[(edge + 1) % 3], c = triangle[(edge + 2) % 3];
+        result.push(a, index, c, index, b, c);
+        inserted = true;
       }
     }
+    if (!inserted) throw new RangeError('Triangulation omitted a boundary vertex');
+    triangles = result;
+    used.add(index);
+  });
+  let area = 0;
+  for (let i = 0; i < triangles.length; i += 3) {
+    const [a, b, c] = triangles.slice(i, i + 3).map(index => points[index]);
+    const signed = cross(a, b, c);
+    const roundoff = Number.EPSILON * 16 * (Math.abs((b.x - a.x) * (c.y - a.y)) + Math.abs((b.y - a.y) * (c.x - a.x)));
+    if (Math.abs(signed) <= roundoff) throw new RangeError('Triangulation produced a degenerate triangle');
+    if ((signed > 0) !== (signedArea(outer) > 0)) [triangles[i + 1], triangles[i + 2]] = [triangles[i + 2], triangles[i + 1]];
+    area += Math.abs(signed) / 2;
   }
   const expectedArea = Math.abs(signedArea(outer)) - holes.reduce((sum, hole) => sum + Math.abs(signedArea(hole)), 0);
   if (triangles.length / 3 !== points.length + 2 * holes.length - 2 ||

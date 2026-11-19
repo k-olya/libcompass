@@ -1,11 +1,12 @@
 import { validatePoint, type Point } from './Point.js';
+import { circleSegments } from './triangulation.js';
 
 /**
  * An analytic circle in sketch coordinates, parameterized by angle in radians.
  *
  * @remarks
- * The circle remains analytic in a sketch. Extrusion samples it into a polygon
- * at the requested resolution.
+ * The circle remains analytic through extrusion. Triangulation samples it at
+ * the library-wide 0.001 chord-deviation resolution.
  */
 export class Circle {
   /** Center in sketch coordinates, retained by reference. */
@@ -40,15 +41,12 @@ export class Circle {
   /**
    * Sample one counterclockwise polygonal boundary.
    *
-   * @param segments - Number of evenly spaced points; defaults to 64.
-   * @returns New points starting at angle zero, without repeating the closing point.
-   * @throws {@link RangeError} if segments is not an integer of at least three,
-   * or a sampled coordinate is not finite.
+   * @returns New points at the library resolution, starting at angle zero,
+   * without repeating the closing point. Segment count is derived from radius.
+   * @throws {@link RangeError} if sampled coordinates are not finite.
    */
-  sample(segments = 64): Point[] {
-    if (!Number.isInteger(segments) || segments < 3) {
-      throw new RangeError('A circle needs at least three segments');
-    }
+  sample(): Point[] {
+    const segments = circleSegments(this.radius);
     return Array.from({ length: segments }, (_, i) => this.at(2 * Math.PI * i / segments));
   }
 }

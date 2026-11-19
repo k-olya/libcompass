@@ -1,11 +1,11 @@
 # libcompass
 
 The CAD library behind compassts, built from sketches, reusable boundary topology,
-and a scene graph. Extrusions return solids with shared vertices, edges, and faces;
+and a scene graph. Extrusions return solids with exact curves, edges, and surfaces;
 each solid is also a memoized node that can be added directly to a scene or
 transform. Triangulation produces WebGL-compatible `Float32Array` XYZ triangle
 positions. Applications provide their own UI, visualizer, exporters, or API.
-The only runtime dependency is `gl-matrix`.
+Runtime dependencies are `gl-matrix` for vector math and `earcut` for polygon triangulation.
 
 ```sh
 npm ci
@@ -29,16 +29,16 @@ cache invalidation.
 ## Sketch and extrude
 
 ```ts
-import { Circle, LineSegment, Plane, Sketch, extrude } from 'libcompass';
+import { Circle, Face, LineSegment, Plane, Sketch, extrude } from 'libcompass';
 
 const sketch = new Sketch({ plane: new Plane() }); // Default plane is world XY.
 const corners = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 6 }, { x: 0, y: 6 }];
 sketch.add(...corners.map((point, i) => new LineSegment({ start: point, end: corners[(i + 1) % 4] })));
 sketch.add(new Circle({ center: { x: 3, y: 3 }, radius: 1 }), new Circle({ center: { x: 7, y: 3 }, radius: 1 }));
 
-const body = extrude({ sketch, direction: [0, 0, 8], circleSegments: 32 }); // Two through holes; 32 segments per circle.
+const body = extrude({ sketch, direction: [0, 0, 8] }); // Two exact circular through holes.
 const positions: Float32Array = body.triangulate();
-// Equivalent: sketch.extrude({ direction: [0, 0, 8], circleSegments: 32 }).
+// Equivalent: sketch.extrude({ direction: [0, 0, 8] }).
 ```
 
 Sketches support multiple disconnected profiles, concave outlines, multiple holes,
@@ -53,24 +53,27 @@ Points and infinite lines are construction geometry and do not create boundaries
 | `Vertex` — `{ position: [x, y, z] }` | An interface for a shared world-space vertex. |
 | `new Line({ point, direction })` | An infinite line with a `ReadonlyVec2` direction; `at(t)` returns `point + t * direction`. |
 | `new LineSegment({ start, end })` | Two endpoints; `at(0)` and `at(1)` return their coordinates. |
-| `new Circle({ center, radius })` | An analytic circle; `at(angle)` uses radians, `sample(segments)` returns a polygon. |
+| `new Circle({ center, radius })` | An analytic circle; `at(angle)` uses radians, `sample()` derives a polygon from radius and the library resolution. |
 | `new Plane({ a, b, c })` | Three noncollinear world points, each a `Vertex` or `ReadonlyVec3`. Defaults to XY. |
 | `new Sketch({ plane })` | Local 2D geometry on a world-space plane; `add(...elements)` returns the sketch. |
 | `new Edge({ start, end })` | A boundary edge retaining its vertex objects. |
-| `new Face({ outer, holes, edges })` | A planar face; holes and shared edges are optional. |
-| `new Solid({ faces })` | A memoized scene node retaining shared face topology. |
+| `new Face({ outer, holes, plane })` | A planar surface with closed loops of edges and spatial curves; holes and an oriented plane are optional. |
+| `new Solid({ surfaces })` | A memoized scene node retaining shared analytic topology. |
+| `new SpatialCurve({ at, start, end })` | A world-space parametric curve on [0, 1], with optional shared endpoint objects. |
+| `new SpatialSurface({ start, end, sides, reversed })` | An exact ruled patch between corresponding open or closed boundaries. |
 | `new TransformMat4({ matrix })` | A memoized scene node applying a gl-matrix transformation. |
 
 Constructors with arguments take a single named options object. `Plane` and
 `Sketch` allow omitted options for their defaults; zero-argument constructors
 such as `Node`, `Memo`, and `Transform` remain unchanged. Extrusion also takes
-named options: `extrude({ sketch, direction, circleSegments })` or
-`sketch.extrude({ direction, circleSegments })`. Omit `circleSegments` to use 64.
+named options: `extrude({ sketch, direction })` or
+`sketch.extrude({ direction })`. Extrusion has no tessellation options.
 Utilities such as `functionalize` and `transformMat4` keep positional arguments.
 
-Every class also has a lowercase constructor shorthand, exported from the root
+Every concrete class also has a lowercase constructor shorthand, exported from the root
 and its class module: `node`, `memo`, `transform`, `transformMat4Node`, `line`,
-`lineSegment`, `circle`, `plane`, `sketch`, `edge`, `face`, and `solid`. They return
+`lineSegment`, `circle`, `plane`, `sketch`, `edge`, `face`, `solid`,
+`spatialCurve`, and `spatialSurface`. They return
 ordinary class instances and accept the same options and defaults. The name
 `transformMat4Node` avoids a collision with the `transformMat4` utility.
 
@@ -95,26 +98,44 @@ oblique or point against the plane normal, but must have a nonzero normal compon
 
 ## Reuse the result
 
-`Solid.vertices`, `Solid.edges`, and `Solid.faces` expose the boundary
-representation. Faces reference the same `Vertex` and `Edge` objects as the
-solid and their neighboring faces. Edges are actual boundaries, not triangulation
-diagonals. Normals and triangles point outward.
+`Solid.surfaces` contains `Face` and `SpatialSurface` instances, both extending
+`Surface`. `Solid.boundaries` contains unique `Edge` and `SpatialCurve` objects,
+and `Solid.vertices` contains their unique topological endpoints. Neighboring
+surfaces retain the same boundary objects. Sampling never adds facets or vertices
+to this topology. A circular cylinder has three surfaces, two circular boundary
+loops, and two topological vertices, regardless of triangulation density.
 
-- `Vertex.position` holds world XYZ coordinates.
-- `Edge.start` and `Edge.end` reference vertices; `edge.at(t)` evaluates a new vertex.
-- `Face.outer` and `Face.holes` hold ordered boundary loops. `face.vertices` and
-  `face.edges` flatten those loops, outer first. `face.plane` gives its local frame
-  and normal. `face.triangulate()` tessellates the face, preserving its holes.
+`SpatialBoundary` is the common interface implemented by edges and curves:
+`start`, `end`, `at(t)`, `sample()`, and `isLoop()`. A loop has identical start and
+end coordinates; no separate `Loop` class is needed. Curve `at(t)` accepts [0, 1],
+returns shared endpoint objects at zero and one, and uses the evaluator's
+parameterization. It is a circumference fraction for circular curves; procedural
+curves need not have constant speed. `sample()` includes both endpoints, even
+for a loop. `Circle.at(angle)` still takes radians and `Circle.sample()` omits the
+repeated closing point.
+
+`Surface.outer` and `Surface.holes` are ordered arrays of shared boundaries;
+traversal direction is inferred from their connected endpoints. `boundaries`
+flattens these loops, and `vertices` lists unique endpoint objects. A periodic
+ruled wall uses its two circular rims as its outer and inner trims, without an
+artificial seam. `SpatialSurface.at(u, v)` evaluates the exact ruled patch.
 
 ```ts
-const top = body.faces.find((face) => face.plane.normal[2] > 0.99)!;
-const nextSketch = Sketch.fromFace(top); // Includes outer boundary and both holes.
+const top = body.surfaces.find((surface): surface is Face =>
+  surface instanceof Face && surface.plane.normal[2] > 0.99
+)!;
+const nextSketch = Sketch.fromFace(top); // Keeps both holes as analytic circles.
 const extension = nextSketch.extrude({ direction: [0, 0, 2] });
+const blankOnTop = new Sketch({ plane: top });
 
-const edge = top.edges[0];
-const midpoint = top.plane.toLocal(edge.at(0.5));
-const planeFromVertices = new Plane({ a: top.outer[0], b: top.outer[1], c: top.outer[2] });
+const boundary = top.boundaries[0];
+const midpoint = top.plane.toLocal(boundary.at(0.5));
 ```
+
+Only `Face` can supply a sketch plane; `SpatialSurface` is rejected even if its
+particular shape happens to be flat. `Sketch.fromFace` copies straight and circular
+trims into sketch entities. Procedural trim curves cannot yet be copied to a
+sketch; use the planar face as a blank sketch plane instead.
 
 Geometry coordinates and topology are exposed as readonly TypeScript properties.
 Create new objects for changes; don't mutate their underlying arrays. Extrusion
@@ -131,16 +152,27 @@ scene.add(transform);
 const scenePositions = scene.triangulate();
 ```
 
-Solid triangulation includes its own faces followed by child geometry and is
+Solid triangulation includes its own surfaces followed by child geometry and is
 cached until `refresh()` is called. Treat cached arrays as read-only. Topology
-properties describe the solid's own faces, excluding children.
+properties describe the solid's own surfaces, excluding children.
 
-Circles stay analytic in the drawing and become polygonal boundaries during
-extrusion (64 segments by default). Curved faces, sketch intersections/booleans,
-and constraints are not implemented. Open, branched, intersecting, overlapping, or
-touching contours fail explicitly rather than producing an ambiguous solid.
-Validation operates on the tessellated boundaries. The dependency-free planar
-triangulator uses O(n³) work and O(n²) storage, intended for modest sketch sizes.
+Circles stay analytic through extrusion. Segment loops and circle intersections
+are validated directly, using even-odd nesting and scale-relative numeric
+comparisons. There is no triangulation during solid construction.
+
+`TRIANGULATION_RESOLUTION` is currently fixed library-wide at `0.001` model units:
+the maximum circular chord deviation. Triangulation derives circle segment counts
+from radius, samples shared boundaries together, and uses Earcut for planar caps.
+Collinear boundary vertices are preserved to prevent cracks. Only the final
+triangle output uses `Float32Array`; analytic coordinate evaluation uses JavaScript
+numbers. Changing mesh density never changes the stored mathematical geometry.
+
+Procedural curves use adaptive quarter-point error probes, which cannot guarantee
+an error bound for arbitrary oscillations between probes. `SpatialSurface`
+currently represents ruled patches, including cylindrical and oblique extrusion
+walls; arbitrary doubly curved surfaces, sketch booleans, and constraints remain
+outside the current API. Invalid trim intersections or triangulations fail
+explicitly rather than producing partial meshes.
 
 ## Scene graph and utilities
 
@@ -148,7 +180,7 @@ triangulator uses O(n³) work and O(n²) storage, intended for modest sketch siz
 `Memo` caches until `refresh()`;
 geometry-producing node subclasses override `triangulateUncached()`. `Transform`
 exposes XYZ `position`, `rotation` (radians, XYZ Euler order), and `scale` objects.
-Sketches, planes, vertices, edges, and faces remain independent math objects.
+Sketches, planes, vertices, edges, curves, and surfaces remain independent math objects.
 
 Use `node.add(first, second)` to append children and `node.remove(first, second)`
 to remove child objects by identity. Both methods return the node for chaining.

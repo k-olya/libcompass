@@ -1,5 +1,6 @@
 import { vec3 } from 'gl-matrix';
 import { validateVertex, type Vertex } from './Vertex.js';
+import type { SpatialBoundary } from './SpatialBoundary.js';
 
 /**
  * A straight boundary edge referencing two world-space vertices.
@@ -8,7 +9,7 @@ import { validateVertex, type Vertex } from './Vertex.js';
  * Extruded solids share each edge object between its incident faces. Face loop
  * order supplies orientation; the edge's own endpoint order need not match it.
  */
-export class Edge {
+export class Edge implements SpatialBoundary {
   /** Vertex at parameter zero, retained by reference. */
   readonly start: Vertex;
   /** Vertex at parameter one, retained by reference. */
@@ -38,6 +39,12 @@ export class Edge {
   at(t: number): Vertex {
     return validateVertex({ position: vec3.lerp([0, 0, 0], this.start.position, this.end.position, t) });
   }
+
+  /** Straight edges have distinct endpoints and therefore are never loops. */
+  isLoop(): boolean { return false; }
+
+  /** Sample the exact straight boundary; only its shared endpoints are needed. */
+  sample(): Vertex[] { return [this.start, this.end]; }
 }
 
 /**

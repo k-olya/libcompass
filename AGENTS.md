@@ -6,8 +6,10 @@
   (even-odd fill) to determine material. Points and infinite lines are construction
   geometry and do not bound a profile.
 - Preserve shared vertex and edge identities in solids so topology can be reused
-  for further operations. Circles remain analytic in sketches and are faceted at
-  the requested resolution during extrusion.
+  for further operations. Circles remain analytic through extrusion. Only
+  triangulation facets curves, at a library-wide chord deviation of 0.001.
+  Solids contain planar faces and spatial surfaces, sharing exact edge and
+  spatial-curve boundaries. Only planar faces can supply sketch planes.
 
 # Earlier node prototypes
 

@@ -1,68 +1,50 @@
-import { Edge } from './Edge.js';
-import { Face } from './Face.js';
 import { Memo } from './Memo.js';
+import type { SpatialBoundary } from './SpatialBoundary.js';
+import { Surface } from './Surface.js';
 import type { Vertex } from './Vertex.js';
 
 /**
- * A memoized scene node with boundary topology, potentially containing disconnected components.
+ * A memoized scene node retaining exact planar and spatial surfaces.
  *
  * @remarks
- * Vertices and edges are collected by object identity, preserving shared
- * topology between faces. Coordinate equality does not merge distinct objects.
- * Construction does not validate shell closure or manifoldness; extrusion
- * supplies consistently oriented boundary faces.
- *
- * Add solids directly to scenes and transform nodes. Triangulation includes
- * this solid's faces followed by its children and is cached until refresh().
- * Topology properties describe this solid's own faces, excluding children.
+ * Surfaces share boundary and endpoint objects. Tessellation never changes
+ * this topology. Shell closure and manifoldness are not validated by this
+ * constructor; extrusion builds closed, consistently oriented solids.
+ * Triangulation includes own surfaces followed by child nodes and is cached
+ * until refresh(). Topology properties exclude children.
  */
 export class Solid extends Memo {
-  /** Faces in construction order, retaining their identities. */
-  readonly faces: readonly Face[];
-  /** Unique vertex objects in first-encounter order across faces. */
+  readonly surfaces: readonly Surface[];
+  readonly boundaries: readonly SpatialBoundary[];
   readonly vertices: readonly Vertex[];
-  /** Unique boundary edge objects in first-encounter order across faces. */
-  readonly edges: readonly Edge[];
 
   /**
-   * Collect faces and their shared boundary topology.
-   *
-   * @param options - Faces to retain; the input array is shallow-copied.
+   * Collect surfaces and their shared analytic boundary topology.
+   * @param options - Surfaces to retain; the input array is shallow-copied.
    */
-  constructor({ faces }: { faces: readonly Face[] }) {
+  constructor({ surfaces }: { surfaces: readonly Surface[] }) {
     super();
-    this.faces = [...faces];
-    this.vertices = [...new Set(faces.flatMap((face) => face.vertices))];
-    this.edges = [...new Set(faces.flatMap((face) => face.edges))];
+    this.surfaces = [...surfaces];
+    this.boundaries = [...new Set(surfaces.flatMap(surface => surface.boundaries))];
+    this.vertices = [...new Set(this.boundaries.flatMap(boundary => [boundary.start, boundary.end]))];
   }
 
-  /**
-   * Concatenate this solid's faces in order, followed by child triangulations.
-   *
-   * @returns A fresh non-indexed array of world-space XYZ triangle positions;
-   * an empty solid without children returns an empty array. Face winding is
-   * preserved. Memo.triangulate() caches the result until refresh() is called.
-   */
   protected override triangulateUncached(): Float32Array {
-    const meshes = [...this.faces.map((face) => face.triangulate()), super.triangulateUncached()];
-    const positions = new Float32Array(meshes.reduce((length, mesh) => length + mesh.length, 0));
-    let offset = 0;
-    for (const mesh of meshes) {
-      positions.set(mesh, offset);
-      offset += mesh.length;
-    }
+    const own = Surface.triangulateAll(this.surfaces), children = super.triangulateUncached();
+    const positions = new Float32Array(own.length + children.length);
+    positions.set(own); positions.set(children, own.length);
     return positions;
   }
 }
 
 /**
- * Collect faces and their shared boundary topology.
+ * Collect surfaces and their shared analytic boundary topology.
  *
  * Constructor shorthand for `new Solid(options)`; returns a new {@link Solid} instance.
  *
- * @param options - Faces to retain; the input array is shallow-copied.
+ * @param options - Surfaces to retain; the input array is shallow-copied.
  */
 export function solid(options: {
-  /** Faces in construction order, retaining their identities. */
-  faces: readonly Face[];
+  /** Planar faces and spatial surfaces, retaining their identities. */
+  surfaces: readonly Surface[];
 }): Solid { return new Solid(options); }

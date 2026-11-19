@@ -13,9 +13,9 @@ test('points and vertices are plain objects and geometry retains their identitie
   assert.deepEqual(circle.at(0), { x: 4, y: 2 });
   const a = { position: [0, 0, 0] }, b = { position: [1, 0, 0] }, c = { position: [0, 1, 0] };
   const edges = [new Edge({ end: b, start: a }), new Edge({ start: b, end: c }), new Edge({ start: c, end: a })];
-  const face = new Face({ edges, outer: [a, b, c] });
-  assert.equal(face.outer[0], a);
-  edges.forEach((edge, i) => assert.equal(face.edges[i], edge));
+  const face = new Face({ outer: edges });
+  assert.equal(face.outer[0], edges[0]);
+  edges.forEach((edge, i) => assert.equal(face.boundaries[i], edge));
   assert.equal(edges[0].start, a);
   assert.deepEqual(edges[0].at(0.5), { position: [0.5, 0, 0] });
 });
@@ -38,7 +38,7 @@ test('geometry consumers and computed results reject nonfinite plain coordinates
     assert.throws(() => new Line({ point: badPoint, direction: [1, 0] }), RangeError);
     assert.throws(() => new LineSegment({ start: point, end: badPoint }), RangeError);
     assert.throws(() => new Edge({ start: vertex, end: badVertex }), RangeError);
-    assert.throws(() => new Face({ outer: [vertex, { position: [1, 0, 0] }, badVertex] }), RangeError);
+    assert.throws(() => new Face({ outer: [new Edge({ start: vertex, end: { position: [1, 0, 0] } }), new Edge({ start: { position: [1, 0, 0] }, end: badVertex }), new Edge({ start: badVertex, end: vertex })] }), RangeError);
     assert.throws(() => new Plane({ a: badVertex }), RangeError);
     assert.throws(() => new Plane().toWorld(badPoint), RangeError);
     assert.throws(() => new Plane().toLocal(badVertex), RangeError);

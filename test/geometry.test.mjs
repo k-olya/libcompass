@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  Circle, Edge, Face, Line, LineSegment, Plane, Sketch, Solid, extrude,
+  Circle, Edge, Face, Line, LineSegment, Plane, Sketch, Solid, SpatialCurve, SpatialSurface, extrude,
 } from 'libcompass';
+
+const boundaries = vertices => vertices.map((start, i) => new Edge({ start, end: vertices[(i + 1) % vertices.length] }));
 
 const close = (actual, expected, tolerance = 1e-5) => {
   assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected}`);
@@ -40,33 +42,28 @@ function checkSolid(solid, expectedVolume) {
   assert.equal(positions.length % 9, 0);
   close(volume(positions), expectedVolume, Math.max(1e-5, expectedVolume * 1e-6));
 
-  // Every topological edge has two incident faces with opposing boundary directions.
-  const incidence = new Map(solid.edges.map((edge) => [edge, []]));
-  for (const face of solid.faces) {
-    assert.ok(face instanceof Face);
-    const triangles = face.triangulate();
-    for (let i = 0; i < triangles.length; i += 9) {
-      const [ax, ay, az, bx, by, bz, cx, cy, cz] = triangles.subarray(i, i + 9);
-      const ux = bx - ax, uy = by - ay, uz = bz - az;
-      const vx = cx - ax, vy = cy - ay, vz = cz - az;
-      const normal = face.plane.normal;
-      assert.ok((uy * vz - uz * vy) * normal[0] + (uz * vx - ux * vz) * normal[1] +
-        (ux * vy - uy * vx) * normal[2] > 0, 'Face plane and triangle normals must agree');
+  // Analytic boundary objects are shared by exactly two incident surfaces.
+  const incidence = new Map(solid.boundaries.map(boundary => [boundary, 0]));
+  for (const surface of solid.surfaces) {
+    assert.ok(surface instanceof Face || surface instanceof SpatialSurface);
+    if (surface instanceof Face) {
+      const triangles = surface.triangulate();
+      for (let i = 0; i < triangles.length; i += 9) {
+        const [ax, ay, az, bx, by, bz, cx, cy, cz] = triangles.subarray(i, i + 9);
+        const ux = bx - ax, uy = by - ay, uz = bz - az;
+        const vx = cx - ax, vy = cy - ay, vz = cz - az;
+        const normal = surface.plane.normal;
+        assert.ok((uy * vz - uz * vy) * normal[0] + (uz * vx - ux * vz) * normal[1] +
+          (ux * vy - uy * vx) * normal[2] > 0, 'Face plane and triangle normals must agree');
+      }
     }
-    let index = 0;
-    for (const loop of [face.outer, ...face.holes]) {
-      loop.forEach((start, i) => {
-        const end = loop[(i + 1) % loop.length], edge = face.edges[index++];
-        assert.ok(solid.vertices.includes(start));
-        assert.ok(solid.vertices.includes(end));
-        incidence.get(edge).push(edge.start === start && edge.end === end ? 1 : -1);
-      });
+    for (const boundary of surface.boundaries) {
+      assert.ok(solid.vertices.includes(boundary.start));
+      assert.ok(solid.vertices.includes(boundary.end));
+      incidence.set(boundary, incidence.get(boundary) + 1);
     }
   }
-  for (const directions of incidence.values()) {
-    assert.equal(directions.length, 2);
-    assert.equal(directions[0] + directions[1], 0);
-  }
+  for (const count of incidence.values()) assert.equal(count, 2);
 
   // Verify the triangulated surface itself is watertight and consistently wound.
   const meshEdges = new Map();
@@ -101,12 +98,11 @@ test('sketch entities retain their mathematical definitions and can be evaluated
   const circle = new Circle({ center: point, radius: 2 });
   close(circle.at(Math.PI / 2).x, 3);
   close(circle.at(Math.PI / 2).y, 0);
-  assert.equal(circle.sample(12).length, 12);
+  assert.ok(circle.sample().length > 12);
   assert.throws(() => new Circle({ center: { x: NaN, y: 0 }, radius: 1 }), RangeError);
   assert.throws(() => new Line({ point, direction: [0, 0] }), RangeError);
   assert.throws(() => new LineSegment({ start: point, end: point }), RangeError);
   assert.throws(() => new Circle({ center: point, radius: 0 }), RangeError);
-  assert.throws(() => circle.sample(2), RangeError);
 });
 
 test('planes defined by three points map between sketch and world coordinates', () => {
@@ -125,8 +121,8 @@ test('concave profiles extrude obliquely without filling their concavities', () 
   const solid = extrude({ sketch, direction: [0.5, -0.25, 3] });
   checkSolid(solid, 21);
   assert.equal(solid.vertices.length, 12);
-  assert.equal(solid.edges.length, 18);
-  assert.equal(solid.faces.length, 8);
+  assert.equal(solid.boundaries.length, 18);
+  assert.equal(solid.surfaces.length, 8);
 });
 
 test('a concave boundary beginning at a reflex corner has a consistent face plane', () => {
@@ -134,7 +130,7 @@ test('a concave boundary beginning at a reflex corner has a consistent face plan
   const sketch = new Sketch().add(...points.map((point, i) => new LineSegment({ start: point, end: points[(i + 1) % points.length] })));
   const solid = sketch.extrude({ direction: [0, 0, 3] });
   checkSolid(solid, 21);
-  const top = solid.faces.find((face) => face.outer.length === 6 && face.plane.normal[2] > 0);
+  const top = solid.surfaces.find((face) => face.outer.length === 6 && face.plane.normal[2] > 0);
   assert.ok(top);
   checkSolid(Sketch.fromFace(top).extrude({ direction: [0, 0, 1] }), 7);
 });
@@ -149,39 +145,46 @@ test('multiple profiles, multiple holes, and nested islands use even-odd fill', 
   const solid = sketch.extrude({ direction: [0, 0, 2] });
   checkSolid(solid, (100 - 4 - 9 + 1 + 4) * 2);
   assert.equal(solid.vertices.length, 40);
-  assert.equal(solid.edges.length, 60);
-  assert.equal(solid.faces.length, 26);
+  assert.equal(solid.boundaries.length, 60);
+  assert.equal(solid.surfaces.length, 26);
   assert.equal(solid.triangulate().length / 9, 76);
-  assert.equal(solid.faces.filter((face) => face.holes.length === 2).length, 2);
+  assert.equal(solid.surfaces.filter((face) => face.holes.length === 2).length, 2);
 
-  const top = solid.faces.find((face) => face.holes.length === 2 && face.plane.normal[2] > 0);
+  const top = solid.surfaces.find((face) => face.holes.length === 2 && face.plane.normal[2] > 0);
   const nextSketch = Sketch.fromFace(top);
   checkSolid(nextSketch.extrude({ direction: [0, 0, 1] }), 87);
-  const boundaryEdge = top.edges[0];
-  assert.ok(solid.edges.includes(boundaryEdge));
+  const boundaryEdge = top.boundaries[0];
+  assert.ok(solid.boundaries.includes(boundaryEdge));
   assert.ok(top.vertices.includes(boundaryEdge.start));
   const midpoint = nextSketch.plane.toLocal(boundaryEdge.at(0.5));
   assert.ok(Number.isFinite(midpoint.x) && Number.isFinite(midpoint.y));
-  const reusedPlane = new Plane({ a: top.outer[0], b: top.outer[1], c: top.outer[2] });
+  const reusedPlane = new Plane({ a: top.outer[0].start, b: top.outer[1].start, c: top.outer[2].start });
   close(reusedPlane.normal[2], 1);
 });
 
-test('circles remain analytic in sketches and produce faceted annular solids', () => {
+test('circles remain analytic through extrusion and are faceted only when triangulated', () => {
   const sketch = new Sketch();
   const outer = new Circle({ center: { x: 0, y: 0 }, radius: 3 });
   sketch.add(outer, new Circle({ center: { x: 0, y: 0 }, radius: 1 }));
-  const segments = 32;
-  const solid = sketch.extrude({ direction: [0, 0, 5], circleSegments: segments });
-  const area = segments / 2 * (3 ** 2 - 1 ** 2) * Math.sin(2 * Math.PI / segments);
+  const solid = sketch.extrude({ direction: [0, 0, 5] });
+  assert.equal(solid.vertices.length, 4);
+  assert.equal(solid.boundaries.length, 4);
+  assert.equal(solid.surfaces.length, 4);
+  assert.ok(solid.boundaries.every(boundary => boundary instanceof SpatialCurve && boundary.isLoop()));
+  const area = [3, 1].reduce((sum, radius, i) => {
+    const count = new Circle({ center: { x: 0, y: 0 }, radius }).sample().length;
+    return sum + (i ? -1 : 1) * count / 2 * radius ** 2 * Math.sin(2 * Math.PI / count);
+  }, 0);
   checkSolid(solid, area * 5);
-  assert.equal(solid.vertices.length, 128);
-  assert.equal(solid.faces.length, 66);
+  assert.equal(solid.vertices.length, 4);
+  assert.equal(solid.boundaries.length, 4);
   assert.equal(sketch.elements[0], outer);
   assert.equal(outer.radius, 3);
-  assert.deepEqual(extrude({ circleSegments: segments, direction: [0, 0, 5], sketch }).triangulate(), solid.triangulate());
-  const defaultSolid = extrude({ sketch, direction: [0, 0, 5] });
-  assert.equal(defaultSolid.vertices.length, 256); // Two circles, 64 vertices per cap.
-  assert.deepEqual(sketch.extrude({ direction: [0, 0, 5] }).triangulate(), defaultSolid.triangulate());
+  const top = solid.surfaces.find(surface => surface instanceof Face && surface.plane.normal[2] > 0);
+  const next = Sketch.fromFace(top);
+  assert.ok(next.elements.every(element => element instanceof Circle));
+  assert.deepEqual(next.elements.map(circle => circle.radius), [3, 1]);
+  checkSolid(next.extrude({ direction: [0, 0, 1] }), area);
 });
 
 test('negative depth on a tilted plane still gives outward winding', () => {
@@ -205,7 +208,6 @@ test('invalid or ambiguous sketches and degenerate extrusions fail explicitly', 
   assert.throws(() => square().extrude({ direction: [0, 0, 0] }), /leave/);
   assert.throws(() => square().extrude({ direction: [1, 1, 0] }), /leave/);
   assert.throws(() => square().extrude({ direction: [0, 0, NaN] }), /finite/);
-  assert.throws(() => square().extrude({ direction: [0, 0, 1], circleSegments: 2.5 }), /resolution/);
   const touching = rectangle(square(), 0, 1, 1, 1);
   assert.throws(() => touching.extrude({ direction: [0, 0, 1] }), /intersect or touch/);
   const crossing = polygon(new Sketch(), [[0, 0], [4, 4], [0, 3], [3, 0]]);
@@ -214,9 +216,7 @@ test('invalid or ambiguous sketches and degenerate extrusions fail explicitly', 
   assert.throws(() => branch.extrude({ direction: [0, 0, 1] }), /unbranched/);
   const vertex = { position: [0, 0, 0] };
   assert.throws(() => new Edge({ start: vertex, end: vertex }), RangeError);
-  assert.throws(() => new Face({ outer: [
-    vertex, { position: [1, 0, 0] }, { position: [1, 1, 0] }, { position: [0, 1, 1] },
-  ] }), /plane/);
+  assert.throws(() => new Face({ outer: boundaries([vertex, { position: [1, 0, 0] }, { position: [1, 1, 0] }, { position: [0, 1, 1] }]) }), /plane/);
 });
 
 test('varied concave profiles with holes remain watertight with the expected volume', () => {

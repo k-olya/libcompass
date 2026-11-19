@@ -7,6 +7,8 @@ import { Plane } from './Plane.js';
 import type { Point } from './Point.js';
 import { extrude } from './extrude.js';
 import { Solid } from './Solid.js';
+import { Edge } from './Edge.js';
+import { SpatialCurve } from './SpatialCurve.js';
 
 /** A drawable sketch entity; points and infinite lines are construction geometry. */
 export type SketchElement = Point | Line | LineSegment | Circle;
@@ -34,10 +36,12 @@ export class Sketch {
   /**
    * Create an empty sketch.
    *
-   * @param options - Optional local-to-world plane; defaults to the world XY plane.
+   * @param options - Optional Plane or planar Face; defaults to the world XY plane.
+   * @throws {@link TypeError} if the placement is not a Plane or Face.
    */
-  constructor({ plane = new Plane() }: { plane?: Plane } = {}) {
-    this.plane = plane;
+  constructor({ plane = new Plane() }: { plane?: Plane | Face } = {}) {
+    if (!(plane instanceof Plane) && !(plane instanceof Face)) throw new TypeError('A sketch plane must be a Plane or planar Face');
+    this.plane = plane instanceof Face ? plane.plane : plane;
   }
 
   /**
@@ -52,17 +56,23 @@ export class Sketch {
   }
 
   /**
-   * Start a sketch on a face, copying its outer and hole boundaries into segments.
+   * Start a sketch on a planar face, preserving its lines and analytic circles.
    *
    * @param face - Planar face supplying the frame and boundary coordinates.
-   * @returns A new sketch on the same plane with new points and segments;
-   * the face's vertex and edge objects are not reused as drawing entities.
+   * @returns A new sketch on the same plane with new drawing entities.
+   * @throws {@link TypeError} for a non-Face surface or a procedural trim curve
+   * without a circular definition. No curve is silently converted to a polygon.
    */
   static fromFace(face: Face): Sketch {
+    if (!(face instanceof Face)) throw new TypeError('Only a planar Face can supply a sketch plane');
     const sketch = new Sketch({ plane: face.plane });
-    for (const loop of [face.outer, ...face.holes]) {
-      const points = loop.map((vertex) => face.plane.toLocal(vertex));
-      sketch.add(...points.map((point, i) => new LineSegment({ start: point, end: points[(i + 1) % points.length] })));
+    for (const boundary of face.boundaries) {
+      if (boundary instanceof Edge) {
+        sketch.add(new LineSegment({ start: face.plane.toLocal(boundary.start), end: face.plane.toLocal(boundary.end) }));
+      } else if (boundary instanceof SpatialCurve && boundary.circle && boundary.plane) {
+        const center = face.plane.toLocal(boundary.plane.toWorld(boundary.circle.center));
+        sketch.add(new Circle({ center, radius: boundary.circle.radius }));
+      } else throw new TypeError('Sketch.fromFace currently supports straight and circular boundaries');
     }
     return sketch;
   }
@@ -70,18 +80,15 @@ export class Sketch {
   /**
    * Extrude all filled regions, preserving holes and disconnected components.
    *
-   * @param options - World-space displacement and optional circle resolution.
+   * @param options - World-space displacement; curves remain analytic.
    * @param options.direction - Finite world-space displacement with a nonzero component
    * along the plane normal; its magnitude is not normalized.
-   * @param options.circleSegments - Segments per circle; integer of at least three,
-   * defaulting to 64.
-   * @returns A new solid snapshot with shared vertices, edges, and outward faces.
-   * @throws {@link RangeError} if the direction, resolution, or profiles are
-   * invalid, or triangulation fails at the current numeric tolerance.
+   * @returns An analytic solid snapshot with shared boundaries and surfaces.
+   * @throws {@link RangeError} if the direction or profiles are invalid.
    * @see {@link extrude}
    */
-  extrude({ direction, circleSegments }: { direction: ReadonlyVec3; circleSegments?: number }): Solid {
-    return extrude({ sketch: this, direction, circleSegments });
+  extrude({ direction }: { direction: ReadonlyVec3 }): Solid {
+    return extrude({ sketch: this, direction });
   }
 }
 
@@ -90,9 +97,10 @@ export class Sketch {
  *
  * Constructor shorthand for `new Sketch(options)`; returns a new {@link Sketch} instance.
  *
- * @param options - Optional local-to-world plane; defaults to the world XY plane.
+ * @param options - Optional Plane or planar Face; defaults to the world XY plane.
+ * @throws {@link TypeError} if the placement is not a Plane or Face.
  */
 export function sketch(options?: {
-  /** Local-to-world plane; defaults to a new world XY plane. */
-  plane?: Plane;
+  /** Placement plane or planar Face; defaults to a new world XY plane. */
+  plane?: Plane | Face;
 }): Sketch { return new Sketch(options); }

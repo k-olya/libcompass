@@ -1,16 +1,15 @@
-import { Circle } from './Circle.js';
 import { Plane } from './Plane.js';
 import { PlanarCurve } from './PlanarCurve.js';
 import type { SpatialBoundary } from './SpatialBoundary.js';
 import { validateVertex, type Vertex } from './Vertex.js';
 import { curveParameters } from './util/curveSampling.js';
+import { TRIANGULATION_RESOLUTION } from './triangulation.js';
 
 /**
  * A mathematically evaluated world-space curve with a normalized [0, 1] parameter.
  *
  * @remarks
  * The evaluator defines the parameterization; it need not have constant speed.
- * Circular curves made with fromPlanarCurve traverse a fraction of the circumference.
  * Geometry is retained analytically; sample() alone produces a polyline.
  */
 export class SpatialCurve implements SpatialBoundary {
@@ -43,8 +42,6 @@ export class SpatialCurve implements SpatialBoundary {
 
   /** Local definition, when constructed with fromPlanarCurve. */
   get planarCurve(): PlanarCurve | undefined { return this.planar?.curve; }
-  /** Exact circular definition, when the local planar curve is a Circle. */
-  get circle(): Circle | undefined { return this.planar?.curve instanceof Circle ? this.planar.curve : undefined; }
   /** Frame of the planar definition; this does not make the curve a sketch plane. */
   get plane(): Plane | undefined { return this.planar?.plane; }
 
@@ -52,16 +49,16 @@ export class SpatialCurve implements SpatialBoundary {
    * Lift any planar curve into world space without sampling it.
    *
    * @remarks
-   * The placement frame and circular parameters are copied. Other planar curves
-   * retain their evaluator; treat its captured geometry as immutable.
+   * The placement frame is copied. Curves retain their evaluator; treat its
+   * captured geometry as immutable. A plain object implementing at(t) is accepted.
    * @param options - Planar curve and placement plane; defaults to world XY.
    * @returns An exact curve with the same [0, 1] parameterization. Loops share
    * one endpoint vertex; open curves retain distinct endpoints.
-   * @throws {@link TypeError} if curve is not a PlanarCurve.
+   * @throws {@link TypeError} if curve has no at(t) evaluator.
    */
-  static fromPlanarCurve({ curve, plane = new Plane() }: { curve: PlanarCurve; plane?: Plane }): SpatialCurve {
-    if (!(curve instanceof PlanarCurve)) throw new TypeError('A spatial curve needs a PlanarCurve to lift');
-    const definition = curve instanceof Circle ? new Circle({ center: { ...curve.center }, radius: curve.radius }) : curve;
+  static fromPlanarCurve({ curve, plane = new Plane() }: { curve: Pick<PlanarCurve, 'at'>; plane?: Plane }): SpatialCurve {
+    if (typeof curve?.at !== 'function') throw new TypeError('A planar curve needs an at(t) evaluator');
+    const definition = curve instanceof PlanarCurve ? curve : new PlanarCurve({ at: t => curve.at(t) });
     const frame = new Plane({ a: [...plane.origin] as [number, number, number],
       b: Array.from(plane.origin).map((value, i) => value + plane.xAxis[i]) as [number, number, number],
       c: Array.from(plane.origin).map((value, i) => value + plane.yAxis[i]) as [number, number, number] });
@@ -86,16 +83,28 @@ export class SpatialCurve implements SpatialBoundary {
   isLoop(): boolean { return Array.from(this.start.position).every((value, i) => value === this.end.position[i]); }
 
   /**
+   * Choose normalized parameters for a polyline, including zero and one.
+   * @param options - Optional positive chord-deviation resolution in model units.
+   * @remarks
+   * Lifted curves delegate to their planar definition; other curves use adaptive
+   * evaluation. Shared surface tessellation may refine these parameters further.
+   * @throws {@link RangeError} if resolution is invalid or subdivision cannot converge.
+   */
+  sampleParameters({ resolution = TRIANGULATION_RESOLUTION }: { resolution?: number } = {}): readonly number[] {
+    return this.planar ? this.planar.curve.sampleParameters({ resolution }) : curveParameters(this, resolution);
+  }
+
+  /**
    * Sample a polyline at the library's 0.001 chord-deviation resolution.
    *
    * @remarks
-   * Includes both endpoints, including the closing endpoint of a loop. Circular
-   * subdivision is computed from radius. Procedural evaluators are adaptively
-   * checked at quarter points; arbitrary oscillations between probes cannot be
+   * Includes both endpoints, including the closing endpoint of a loop. Subdivision
+   * comes from sampleParameters(). Adaptive evaluators are checked at quarter
+   * points; arbitrary oscillations between probes cannot be
    * bounded without additional curvature information. An unresolved interval
    * throws instead of silently exceeding the subdivision limit.
    */
-  sample(): Vertex[] { return curveParameters(this).map(t => this.at(t)); }
+  sample(): Vertex[] { return this.sampleParameters().map(t => this.at(t)); }
 }
 
 /**

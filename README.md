@@ -115,11 +115,12 @@ general procedural planar curve without tessellation.
 
 `SpatialCurve.fromPlanarCurve({ curve, plane })` places any `PlanarCurve` on a
 world-space plane (XY by default), preserving its exact evaluator and normalized
-parameterization. It replaces `fromCircle({ circle, plane })`. The placement frame
-and circular parameters are copied; general evaluators retain their captured
-geometry, which should be treated as immutable. `planarCurve` and `plane` on the
-result expose the planar definition and placement; `circle` remains available
-when that definition is a `Circle`. This conversion does not sample the curve.
+parameterization. It also accepts plain objects implementing `at(t)` and replaces
+`fromCircle({ circle, plane })`. The placement frame is copied; source evaluators
+retain their captured geometry, which should be treated as immutable.
+`planarCurve` and `plane` on the result expose the generic local definition and
+placement. Spatial curves have no shape-specific properties or copying logic.
+This conversion does not sample the curve.
 `SketchElement` is `Point | Line | LineSegment | PlanarCurve`, including `Circle`
 through inheritance. Sketches retain general planar curves, but extrusion
 currently supports only segment profiles and circles; it rejects other planar
@@ -134,6 +135,11 @@ curves need not have constant speed. `sample()` includes both endpoints, even
 for a loop. This closing-point convention applies to every curve, including
 `PlanarCurve.sample()` and `Circle.sample()`: loops always repeat the closing point.
 Circle sample counts are derived from radius and the library resolution.
+`sampleParameters({ resolution })` returns normalized parameters including zero
+and one. The default planar and spatial implementations adaptively evaluate the
+curve; `Circle` overrides this method using its radius-based bound. Lifted curves
+delegate to their planar definition, so new curve types can customize sampling
+without adding type checks to `SpatialCurve` or the shared tessellation code.
 
 ```ts
 import { Circle, Plane, SpatialCurve } from 'libcompass';
@@ -154,7 +160,8 @@ artificial seam. `SpatialSurface.at(u, v)` evaluates the exact ruled patch.
 const top = body.surfaces.find((surface): surface is Face =>
   surface instanceof Face && surface.plane.normal[2] > 0.99
 )!;
-const nextSketch = Sketch.fromFace(top); // Keeps both holes as analytic circles.
+const nextSketch = Sketch.fromFace(top); // Empty sketch using the face's plane.
+nextSketch.add(new Circle({ center: { x: 5, y: 3 }, radius: 0.5 }));
 const extension = nextSketch.extrude({ direction: [0, 0, 2] });
 const blankOnTop = new Sketch({ plane: top });
 
@@ -163,9 +170,9 @@ const midpoint = top.plane.toLocal(boundary.at(0.5));
 ```
 
 Only `Face` can supply a sketch plane; `SpatialSurface` is rejected even if its
-particular shape happens to be flat. `Sketch.fromFace` copies straight and circular
-trims into sketch entities. Procedural trim curves cannot yet be copied to a
-sketch; use the planar face as a blank sketch plane instead.
+particular shape happens to be flat. `Sketch.fromFace(face)` and
+`new Sketch({ plane: face })` both create empty sketches sharing the face's plane.
+Neither inspects, copies, or reconstructs the face's boundaries, including holes.
 
 Geometry coordinates and topology are exposed as readonly TypeScript properties.
 Create new objects for changes; don't mutate their underlying arrays. Extrusion

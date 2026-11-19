@@ -1,7 +1,6 @@
 import { SpatialCurve } from '../SpatialCurve.js';
 import type { SpatialBoundary } from '../SpatialBoundary.js';
 import type { Vertex } from '../Vertex.js';
-import { curveParameters } from './curveSampling.js';
 import { TRIANGULATION_RESOLUTION } from '../triangulation.js';
 
 /** Per-mesh shared subdivision and vertex storage; never changes analytic topology. */
@@ -32,7 +31,7 @@ export class Tessellation {
     let parameters = this.parameters.get(group);
     if (!parameters) {
       const resolution = Math.min(TRIANGULATION_RESOLUTION, ...[...group].map(item => this.resolutions.get(item) ?? TRIANGULATION_RESOLUTION));
-      const initial = [...new Set([...group].flatMap(item => item instanceof SpatialCurve ? [...curveParameters(item, resolution)] : [0, 1]))].sort((a, b) => a - b);
+      const initial = [...new Set([...group].flatMap(item => item instanceof SpatialCurve ? [...item.sampleParameters({ resolution })] : [0, 1]))].sort((a, b) => a - b);
       const pairs = this.pairs.filter(([a]) => group.has(a));
       parameters = [0];
       const refine = (a: number, b: number, depth: number): void => {

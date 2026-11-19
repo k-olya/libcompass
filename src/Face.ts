@@ -1,5 +1,6 @@
 import { vec3 } from 'gl-matrix';
 import { Edge } from './Edge.js';
+import { Circle } from './Circle.js';
 import { Plane } from './Plane.js';
 import { SpatialCurve } from './SpatialCurve.js';
 import type { SpatialBoundary } from './SpatialBoundary.js';
@@ -65,16 +66,16 @@ export class Face extends Surface {
   protected override prepare(context: Tessellation): void {
     // Exact circular clearances prevent a valid narrow gap from being crossed by chords.
     for (const boundary of this.boundaries) {
-      if (!(boundary instanceof SpatialCurve) || !boundary.circle || !boundary.plane) continue;
-      const center = this.plane.toLocal(boundary.plane.toWorld(boundary.circle.center));
-      const radius = boundary.circle.radius;
+      if (!(boundary instanceof SpatialCurve) || !(boundary.planarCurve instanceof Circle) || !boundary.plane) continue;
+      const center = this.plane.toLocal(boundary.plane.toWorld(boundary.planarCurve.center));
+      const radius = boundary.planarCurve.radius;
       for (const other of this.boundaries) {
         if (other === boundary) continue;
         let gap: number | undefined;
-        if (other instanceof SpatialCurve && other.circle && other.plane) {
-          const otherCenter = this.plane.toLocal(other.plane.toWorld(other.circle.center));
+        if (other instanceof SpatialCurve && other.planarCurve instanceof Circle && other.plane) {
+          const otherCenter = this.plane.toLocal(other.plane.toWorld(other.planarCurve.center));
           const distance = Math.hypot(center.x - otherCenter.x, center.y - otherCenter.y);
-          gap = Math.max(distance - radius - other.circle.radius, Math.abs(radius - other.circle.radius) - distance);
+          gap = Math.max(distance - radius - other.planarCurve.radius, Math.abs(radius - other.planarCurve.radius) - distance);
         } else if (other instanceof Edge) {
           const a = this.plane.toLocal(other.start), b = this.plane.toLocal(other.end);
           const dx = b.x - a.x, dy = b.y - a.y;

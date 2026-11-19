@@ -132,7 +132,9 @@ test('a concave boundary beginning at a reflex corner has a consistent face plan
   checkSolid(solid, 21);
   const top = solid.surfaces.find((face) => face.outer.length === 6 && face.plane.normal[2] > 0);
   assert.ok(top);
-  checkSolid(Sketch.fromFace(top).extrude({ direction: [0, 0, 1] }), 7);
+  const next = Sketch.fromFace(top);
+  assert.equal(next.plane, top.plane);
+  assert.deepEqual(next.elements, []);
 });
 
 test('multiple profiles, multiple holes, and nested islands use even-odd fill', () => {
@@ -152,7 +154,8 @@ test('multiple profiles, multiple holes, and nested islands use even-odd fill', 
 
   const top = solid.surfaces.find((face) => face.holes.length === 2 && face.plane.normal[2] > 0);
   const nextSketch = Sketch.fromFace(top);
-  checkSolid(nextSketch.extrude({ direction: [0, 0, 1] }), 87);
+  assert.equal(nextSketch.plane, top.plane);
+  assert.deepEqual(nextSketch.elements, []);
   const boundaryEdge = top.boundaries[0];
   assert.ok(solid.boundaries.includes(boundaryEdge));
   assert.ok(top.vertices.includes(boundaryEdge.start));
@@ -182,8 +185,9 @@ test('circles remain analytic through extrusion and are faceted only when triang
   assert.equal(outer.radius, 3);
   const top = solid.surfaces.find(surface => surface instanceof Face && surface.plane.normal[2] > 0);
   const next = Sketch.fromFace(top);
-  assert.ok(next.elements.every(element => element instanceof Circle));
-  assert.deepEqual(next.elements.map(circle => circle.radius), [3, 1]);
+  assert.equal(next.plane, top.plane);
+  assert.deepEqual(next.elements, []);
+  next.add(...sketch.elements);
   checkSolid(next.extrude({ direction: [0, 0, 1] }), area);
 });
 

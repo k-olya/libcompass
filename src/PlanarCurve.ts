@@ -1,5 +1,6 @@
 import { validatePoint, type Point } from './Point.js';
 import { curveParameters } from './util/curveSampling.js';
+import { TRIANGULATION_RESOLUTION } from './triangulation.js';
 
 /**
  * An exact curve in local XY coordinates with a normalized [0, 1] parameter.
@@ -53,17 +54,28 @@ export class PlanarCurve {
   isLoop(): boolean { return this.start.x === this.end.x && this.start.y === this.end.y; }
 
   /**
+   * Choose normalized parameters for a polyline, including zero and one.
+   * @param options - Optional positive chord-deviation resolution in model units.
+   * @remarks
+   * Uses adaptive evaluation by default. Subclasses can provide tighter bounds
+   * or a specialized subdivision rule without changing spatial curve code.
+   * @throws {@link RangeError} if resolution is invalid or subdivision cannot converge.
+   */
+  sampleParameters({ resolution = TRIANGULATION_RESOLUTION }: { resolution?: number } = {}): readonly number[] {
+    return curveParameters(this, resolution);
+  }
+
+  /**
    * Sample local points at the library's 0.001 chord-deviation resolution.
    *
    * @remarks
    * Includes both endpoints, including the repeated closing point of a loop.
-   * A Circle's samples run counterclockwise starting and ending at local +X.
-   * Circular subdivision is derived from radius. Other evaluators use adaptive
+   * Subdivision comes from sampleParameters(). Adaptive evaluators use
    * quarter-point probes; arbitrary oscillations between probes cannot be bounded
    * without additional curvature information. Unresolved subdivision throws.
    */
   sample(): Point[] {
-    return curveParameters(this).map(t => this.at(t));
+    return this.sampleParameters().map(t => this.at(t));
   }
 }
 

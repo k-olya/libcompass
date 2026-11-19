@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Circle, Edge, Face, Plane, Sketch, Solid, SpatialCurve, SpatialSurface, Surface, TRIANGULATION_RESOLUTION, spatialCurve, spatialSurface } from 'libcompass';
+import { Circle, Edge, Face, PlanarCurve, Plane, Sketch, Solid, SpatialCurve, SpatialSurface, Surface, TRIANGULATION_RESOLUTION, spatialCurve, spatialSurface } from 'libcompass';
 
 const close = (actual, expected, tolerance = 1e-11) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected}`);
 const rim = (radius, z = 0) => SpatialCurve.fromPlanarCurve({ curve: new Circle({ center: { x: 0, y: 0 }, radius }), plane: new Plane({ a: [0, 0, z], b: [1, 0, z], c: [0, 1, z] }) });
@@ -110,6 +110,32 @@ test('ruled surfaces synchronize differently sampled rims with their planar caps
   assert.equal(new Sketch({ plane: top }).plane, top.plane);
 });
 
+test('general parametric ellipses lift into a watertight solid without circle metadata', () => {
+  const ellipse = { at(t) {
+    const angle = (t === 1 ? 0 : t) * 2 * Math.PI;
+    return { x: 3 * Math.cos(angle), y: 2 * Math.sin(angle) };
+  } };
+  const start = SpatialCurve.fromPlanarCurve({ curve: ellipse });
+  const end = SpatialCurve.fromPlanarCurve({ curve: ellipse, plane: new Plane({ a: [0, 0, 4], b: [1, 0, 4], c: [0, 1, 4] }) });
+  const body = new Solid({ surfaces: [
+    new Face({ outer: [start], plane: new Plane({ a: [0, 0, 0], b: [1, 0, 0], c: [0, -1, 0] }) }),
+    new Face({ outer: [end] }),
+    new SpatialSurface({ start, end }),
+  ] });
+  assert.ok(start.planarCurve instanceof PlanarCurve);
+  assert.equal('circle' in start, false);
+  assert.equal(body.boundaries.length, 2);
+  assert.equal(body.vertices.length, 2);
+  const positions = body.triangulate();
+  assertWatertight(positions);
+  let volume = 0;
+  for (let i = 0; i < positions.length; i += 9) {
+    const [ax, ay, az, bx, by, bz, cx, cy, cz] = positions.subarray(i, i + 9);
+    volume += (ax * (by * cz - bz * cy) + ay * (bz * cx - bx * cz) + az * (bx * cy - by * cx)) / 6;
+  }
+  close(volume, 24 * Math.PI, 0.1);
+});
+
 test('curved extrusion winding remains outward on tilted planes and negative displacements', () => {
   const plane = new Plane({ a: [0, 0, 2], b: [1, 0, 2], c: [0, 0, 3] });
   for (const direction of [[0.3, -3, 0.7], [-0.2, 3, -0.5]]) {
@@ -137,7 +163,9 @@ test('faces accept mixed straight and curved trims without replacing analytic bo
   assert.equal(face.boundaries[1], edge);
   assert.ok(face.triangulate().length > 0);
   assert.equal(new Sketch({ plane: face }).plane, face.plane);
-  assert.throws(() => Sketch.fromFace(face), /straight and circular/);
+  const sketch = Sketch.fromFace(face);
+  assert.equal(sketch.plane, face.plane);
+  assert.deepEqual(sketch.elements, []);
 });
 
 test('circle intersections use analytic profiles, independently of mesh resolution', () => {

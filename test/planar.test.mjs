@@ -67,7 +67,7 @@ test('fromPlanarCurve lifts open curves exactly onto a copied placement frame wi
   const plane = new Plane({ a: [2, -3, 4], b: [3, -3, 4], c: [2, -3, 5] });
   const lifted = SpatialCurve.fromPlanarCurve({ curve, plane });
   assert.equal(lifted.planarCurve, curve);
-  assert.equal(lifted.circle, undefined);
+  assert.equal('circle' in lifted, false);
   assert.notEqual(lifted.plane, plane);
   assert.equal(lifted.isLoop(), false);
   assert.equal(lifted.at(0), lifted.start);
@@ -99,10 +99,47 @@ test('every planar and lifted spatial loop sample repeats its closing point', ()
     close(spatial.at(0.123456789).position[0], planar.at(0.123456789).x);
     close(spatial.at(0.123456789).position[1], planar.at(0.123456789).y);
   }
-  const center = { x: 2, y: 3 };
-  const original = new Circle({ center, radius: 1.123456789 });
+  const original = new Circle({ center: { x: 2, y: 3 }, radius: 1.123456789 });
   const lifted = SpatialCurve.fromPlanarCurve({ curve: original });
-  center.x = 99;
   close(lifted.at(0.5).position[0], 2 - original.radius);
-  assert.equal(lifted.circle.radius, original.radius);
+  assert.equal(lifted.planarCurve, original);
+  assert.equal('circle' in lifted, false);
+});
+
+test('lifting accepts plain parametric evaluators and delegates subclass subdivision without curve-type checks', () => {
+  const plain = { scale: 2, at(t) { return { x: this.scale * t, y: t * t }; } };
+  const lifted = SpatialCurve.fromPlanarCurve({ curve: plain });
+  assert.deepEqual(lifted.at(0.25).position, [0.5, 0.0625, 0]);
+  assert.equal(lifted.isLoop(), false);
+  assert.equal(lifted.sample().at(-1), lifted.end);
+
+  let requestedResolution;
+  const parameters = [0, 0.2, 0.75, 1];
+  class CustomCurve extends PlanarCurve {
+    constructor() { super({ at: t => ({ x: t, y: t * t }) }); }
+    sampleParameters({ resolution } = {}) { requestedResolution = resolution; return parameters; }
+  }
+  const source = new CustomCurve();
+  const spatial = SpatialCurve.fromPlanarCurve({ curve: source });
+  assert.equal(spatial.planarCurve, source);
+  assert.equal(spatial.sampleParameters({ resolution: 0.0001 }), parameters);
+  assert.equal(requestedResolution, 0.0001);
+  assert.deepEqual(spatial.sample().map(vertex => vertex.position[0]), parameters);
+});
+
+test('subdivision resolution is validated and circle-specific bounds remain in Circle', () => {
+  const circle = new Circle({ center: { x: 0, y: 0 }, radius: 2 });
+  const curve = new PlanarCurve({ at: t => ({ x: t, y: t * t }) });
+  for (const definition of [circle, curve]) {
+    const lifted = SpatialCurve.fromPlanarCurve({ curve: definition });
+    const coarse = definition.sampleParameters({ resolution: 0.01 });
+    const fine = definition.sampleParameters({ resolution: 0.0001 });
+    assert.ok(fine.length > coarse.length);
+    assert.equal(fine[0], 0); assert.equal(fine.at(-1), 1);
+    assert.deepEqual(lifted.sampleParameters({ resolution: 0.0001 }), fine);
+    for (const resolution of [-1, 0, NaN, Infinity]) {
+      assert.throws(() => definition.sampleParameters({ resolution }), RangeError);
+      assert.throws(() => lifted.sampleParameters({ resolution }), RangeError);
+    }
+  }
 });

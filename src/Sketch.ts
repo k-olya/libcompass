@@ -1,15 +1,12 @@
 import type { ReadonlyVec3 } from 'gl-matrix';
-import { Circle } from './Circle.js';
 import { Face } from './Face.js';
-import { Line } from './Line.js';
-import { LineSegment } from './LineSegment.js';
+import type { Line } from './Line.js';
+import type { LineSegment } from './LineSegment.js';
 import { Plane } from './Plane.js';
 import type { PlanarCurve } from './PlanarCurve.js';
 import type { Point } from './Point.js';
 import { extrude } from './extrude.js';
 import { Solid } from './Solid.js';
-import { Edge } from './Edge.js';
-import { SpatialCurve } from './SpatialCurve.js';
 
 /** A drawable sketch entity; points and infinite lines are construction geometry. */
 export type SketchElement = Point | Line | LineSegment | PlanarCurve;
@@ -58,25 +55,15 @@ export class Sketch {
   }
 
   /**
-   * Start a sketch on a planar face, preserving its lines and analytic circles.
+   * Start an empty sketch on a planar face's plane.
    *
-   * @param face - Planar face supplying the frame and boundary coordinates.
-   * @returns A new sketch on the same plane with new drawing entities.
-   * @throws {@link TypeError} for a non-Face surface or a procedural trim curve
-   * without a circular definition. No curve is silently converted to a polygon.
+   * @param face - Planar face supplying the placement plane.
+   * @returns An empty sketch sharing the face's plane; boundaries are not copied.
+   * @throws {@link TypeError} if the surface is not a planar Face.
    */
   static fromFace(face: Face): Sketch {
     if (!(face instanceof Face)) throw new TypeError('Only a planar Face can supply a sketch plane');
-    const sketch = new Sketch({ plane: face.plane });
-    for (const boundary of face.boundaries) {
-      if (boundary instanceof Edge) {
-        sketch.add(new LineSegment({ start: face.plane.toLocal(boundary.start), end: face.plane.toLocal(boundary.end) }));
-      } else if (boundary instanceof SpatialCurve && boundary.circle && boundary.plane) {
-        const center = face.plane.toLocal(boundary.plane.toWorld(boundary.circle.center));
-        sketch.add(new Circle({ center, radius: boundary.circle.radius }));
-      } else throw new TypeError('Sketch.fromFace currently supports straight and circular boundaries');
-    }
-    return sketch;
+    return new Sketch({ plane: face.plane });
   }
 
   /**

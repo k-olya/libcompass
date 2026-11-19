@@ -29,16 +29,16 @@ cache invalidation.
 ## Sketch and extrude
 
 ```ts
-import { Circle, LineSegment, Plane, Point, Sketch, extrude } from 'libcompass';
+import { Circle, LineSegment, Plane, Sketch, extrude } from 'libcompass';
 
-const sketch = new Sketch(new Plane()); // Default plane is world XY.
-const corners = [new Point(0, 0), new Point(10, 0), new Point(10, 6), new Point(0, 6)];
-sketch.add(...corners.map((point, i) => new LineSegment(point, corners[(i + 1) % 4])));
-sketch.add(new Circle(new Point(3, 3), 1), new Circle(new Point(7, 3), 1));
+const sketch = new Sketch({ plane: new Plane() }); // Default plane is world XY.
+const corners = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 6 }, { x: 0, y: 6 }];
+sketch.add(...corners.map((point, i) => new LineSegment({ start: point, end: corners[(i + 1) % 4] })));
+sketch.add(new Circle({ center: { x: 3, y: 3 }, radius: 1 }), new Circle({ center: { x: 7, y: 3 }, radius: 1 }));
 
-const body = extrude(sketch, [0, 0, 8], 32); // Two through holes; 32 segments per circle.
+const body = extrude({ sketch, direction: [0, 0, 8], circleSegments: 32 }); // Two through holes; 32 segments per circle.
 const positions: Float32Array = body.triangulate();
-// Equivalent: sketch.extrude([0, 0, 8], 32).
+// Equivalent: sketch.extrude({ direction: [0, 0, 8], circleSegments: 32 }).
 ```
 
 Sketches support multiple disconnected profiles, concave outlines, multiple holes,
@@ -49,12 +49,43 @@ Points and infinite lines are construction geometry and do not create boundaries
 
 | Object | Definition and evaluation |
 | --- | --- |
-| `Point(x, y)` | A sketch-local 2D point. |
-| `Line(point, direction)` | An infinite line with a `ReadonlyVec2` direction; `at(t)` returns `point + t * direction`. |
-| `LineSegment(start, end)` | Two endpoints; `at(0)` and `at(1)` return their coordinates. |
-| `Circle(center, radius)` | An analytic circle; `at(angle)` uses radians, `sample(segments)` returns a polygon. |
-| `Plane(a, b, c)` | Three noncollinear world points, each a `Vertex` or `ReadonlyVec3`. Defaults to XY. |
-| `Sketch(plane)` | Local 2D geometry on a world-space plane; `add(...elements)` returns the sketch. |
+| `Point` — `{ x, y }` | An interface for a sketch-local 2D point. |
+| `Vertex` — `{ position: [x, y, z] }` | An interface for a shared world-space vertex. |
+| `new Line({ point, direction })` | An infinite line with a `ReadonlyVec2` direction; `at(t)` returns `point + t * direction`. |
+| `new LineSegment({ start, end })` | Two endpoints; `at(0)` and `at(1)` return their coordinates. |
+| `new Circle({ center, radius })` | An analytic circle; `at(angle)` uses radians, `sample(segments)` returns a polygon. |
+| `new Plane({ a, b, c })` | Three noncollinear world points, each a `Vertex` or `ReadonlyVec3`. Defaults to XY. |
+| `new Sketch({ plane })` | Local 2D geometry on a world-space plane; `add(...elements)` returns the sketch. |
+| `new Edge({ start, end })` | A boundary edge retaining its vertex objects. |
+| `new Face({ outer, holes, edges })` | A planar face; holes and shared edges are optional. |
+| `new Solid({ faces })` | A memoized scene node retaining shared face topology. |
+| `new TransformMat4({ matrix })` | A memoized scene node applying a gl-matrix transformation. |
+
+Constructors with arguments take a single named options object. `Plane` and
+`Sketch` allow omitted options for their defaults; zero-argument constructors
+such as `Node`, `Memo`, and `Transform` remain unchanged. Extrusion also takes
+named options: `extrude({ sketch, direction, circleSegments })` or
+`sketch.extrude({ direction, circleSegments })`. Omit `circleSegments` to use 64.
+Utilities such as `functionalize` and `transformMat4` keep positional arguments.
+
+Every class also has a lowercase constructor shorthand, exported from the root
+and its class module: `node`, `memo`, `transform`, `transformMat4Node`, `line`,
+`lineSegment`, `circle`, `plane`, `sketch`, `edge`, `face`, and `solid`. They return
+ordinary class instances and accept the same options and defaults. The name
+`transformMat4Node` avoids a collision with the `transformMat4` utility.
+
+```ts
+import { circle, sketch } from 'libcompass';
+
+const s = sketch().add(circle({ center: { x: 0, y: 0 }, radius: 5 }));
+const body = s.extrude({ direction: [0, 0, 10] });
+```
+
+`Point` and `Vertex` have no runtime constructors. Use plain object literals and
+`import type { Point, Vertex } from 'libcompass'` for TypeScript annotations.
+Geometry operations validate finite coordinates when consuming those objects.
+Vertex objects and their position arrays are retained by reference; treat them
+as immutable so shared topology remains consistent.
 
 The first plane point is the origin; the first-to-second direction defines local
 X, and the three-point orientation defines the normal. `plane.toWorld(point)`
@@ -65,7 +96,7 @@ oblique or point against the plane normal, but must have a nonzero normal compon
 ## Reuse the result
 
 `Solid.vertices`, `Solid.edges`, and `Solid.faces` expose the boundary
-representation. Faces reference the same `Vertex` and `Edge` instances as the
+representation. Faces reference the same `Vertex` and `Edge` objects as the
 solid and their neighboring faces. Edges are actual boundaries, not triangulation
 diagonals. Normals and triangles point outward.
 
@@ -78,11 +109,11 @@ diagonals. Normals and triangles point outward.
 ```ts
 const top = body.faces.find((face) => face.plane.normal[2] > 0.99)!;
 const nextSketch = Sketch.fromFace(top); // Includes outer boundary and both holes.
-const extension = nextSketch.extrude([0, 0, 2]);
+const extension = nextSketch.extrude({ direction: [0, 0, 2] });
 
 const edge = top.edges[0];
 const midpoint = top.plane.toLocal(edge.at(0.5));
-const planeFromVertices = new Plane(top.outer[0], top.outer[1], top.outer[2]);
+const planeFromVertices = new Plane({ a: top.outer[0], b: top.outer[1], c: top.outer[2] });
 ```
 
 Geometry coordinates and topology are exposed as readonly TypeScript properties.

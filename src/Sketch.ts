@@ -4,7 +4,7 @@ import { Face } from './Face.js';
 import { Line } from './Line.js';
 import { LineSegment } from './LineSegment.js';
 import { Plane } from './Plane.js';
-import { Point } from './Point.js';
+import type { Point } from './Point.js';
 import { extrude } from './extrude.js';
 import { Solid } from './Solid.js';
 
@@ -21,23 +21,24 @@ export type SketchElement = Point | Line | LineSegment | Circle;
  *
  * @example
  * ```ts
- * const sketch = new Sketch().add(new Circle(new Point(0, 0), 5));
- * const solid = sketch.extrude([0, 0, 10]);
+ * const sketch = new Sketch().add(new Circle({ center: { x: 0, y: 0 }, radius: 5 }));
+ * const solid = sketch.extrude({ direction: [0, 0, 10] });
  * ```
  */
 export class Sketch {
   /** Mutable drawing entities in insertion order. */
   readonly elements: SketchElement[] = [];
+  /** Plane placing the sketch in world space. */
+  readonly plane: Plane;
 
   /**
    * Create an empty sketch.
    *
-   * @param plane - Local-to-world frame; defaults to the world XY plane.
+   * @param options - Optional local-to-world plane; defaults to the world XY plane.
    */
-  constructor(
-    /** Plane placing the sketch in world space. */
-    public readonly plane: Plane = new Plane()
-  ) {}
+  constructor({ plane = new Plane() }: { plane?: Plane } = {}) {
+    this.plane = plane;
+  }
 
   /**
    * Append entities to the drawing.
@@ -58,10 +59,10 @@ export class Sketch {
    * the face's vertex and edge objects are not reused as drawing entities.
    */
   static fromFace(face: Face): Sketch {
-    const sketch = new Sketch(face.plane);
+    const sketch = new Sketch({ plane: face.plane });
     for (const loop of [face.outer, ...face.holes]) {
       const points = loop.map((vertex) => face.plane.toLocal(vertex));
-      sketch.add(...points.map((point, i) => new LineSegment(point, points[(i + 1) % points.length])));
+      sketch.add(...points.map((point, i) => new LineSegment({ start: point, end: points[(i + 1) % points.length] })));
     }
     return sketch;
   }
@@ -69,16 +70,29 @@ export class Sketch {
   /**
    * Extrude all filled regions, preserving holes and disconnected components.
    *
-   * @param direction - Finite world-space displacement with a nonzero component
+   * @param options - World-space displacement and optional circle resolution.
+   * @param options.direction - Finite world-space displacement with a nonzero component
    * along the plane normal; its magnitude is not normalized.
-   * @param circleSegments - Segments per circle; integer of at least three,
+   * @param options.circleSegments - Segments per circle; integer of at least three,
    * defaulting to 64.
    * @returns A new solid snapshot with shared vertices, edges, and outward faces.
    * @throws {@link RangeError} if the direction, resolution, or profiles are
    * invalid, or triangulation fails at the current numeric tolerance.
    * @see {@link extrude}
    */
-  extrude(direction: ReadonlyVec3, circleSegments = 64): Solid {
-    return extrude(this, direction, circleSegments);
+  extrude({ direction, circleSegments }: { direction: ReadonlyVec3; circleSegments?: number }): Solid {
+    return extrude({ sketch: this, direction, circleSegments });
   }
 }
+
+/**
+ * Create an empty sketch.
+ *
+ * Constructor shorthand for `new Sketch(options)`; returns a new {@link Sketch} instance.
+ *
+ * @param options - Optional local-to-world plane; defaults to the world XY plane.
+ */
+export function sketch(options?: {
+  /** Local-to-world plane; defaults to a new world XY plane. */
+  plane?: Plane;
+}): Sketch { return new Sketch(options); }

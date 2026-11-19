@@ -61,3 +61,15 @@ export class Node {
     return positions;
   }
 }
+
+/**
+ * Base class for scene graph nodes.
+ *
+ * Constructor shorthand for `new Node()`; returns a new {@link Node} instance.
+ *
+ * @remarks
+ * Solids and transform nodes extend Memo and implement its uncached
+ * triangulation hook to retain memoization. Sketches, planes, and boundary
+ * topology objects are independent math objects.
+ */
+export function node(): Node { return new Node(); }

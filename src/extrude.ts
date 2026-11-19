@@ -3,16 +3,16 @@ import { Circle } from './Circle.js';
 import { Edge } from './Edge.js';
 import { Face } from './Face.js';
 import { LineSegment } from './LineSegment.js';
-import { Point } from './Point.js';
+import type { Point } from './Point.js';
 import type { Sketch } from './Sketch.js';
 import { Solid } from './Solid.js';
-import { Vertex } from './Vertex.js';
+import { validateVertex, type Vertex } from './Vertex.js';
 import { containsPoint, signedArea, validateLoops } from './util/polygon.js';
 
 function profiles(sketch: Sketch, circleSegments: number): Point[][] {
   const loops = sketch.elements.filter((element) => element instanceof Circle).map((circle) => circle.sample(circleSegments));
   const segments = new Set(sketch.elements.filter((element) => element instanceof LineSegment));
-  // Endpoints are matched by coordinates, allowing independent Point instances.
+  // Endpoints are matched by coordinates, allowing independent point objects.
   const equal = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
   const degree = (point: Point) => [...segments].filter((segment) => equal(segment.start, point) || equal(segment.end, point)).length;
   for (const segment of segments) {
@@ -52,11 +52,12 @@ function profiles(sketch: Sketch, circleSegments: number): Point[][] {
  * it. Caps and walls share vertex and edge identities. Each triangle is wound
  * outward, including when the displacement opposes the sketch plane normal.
  *
- * @param sketch - Drawing containing closed segment loops and/or circles.
- * @param direction - Finite world-space displacement, not a unit direction;
+ * @param options - Sketch, world-space displacement, and optional circle resolution.
+ * @param options.sketch - Drawing containing closed segment loops and/or circles.
+ * @param options.direction - Finite world-space displacement, not a unit direction;
  * oblique extrusion is supported. Its normal component must exceed the
  * relative coplanarity tolerance of `1e-10` times its length.
- * @param circleSegments - Polygon segments per circle; integer of at least
+ * @param options.circleSegments - Polygon segments per circle; integer of at least
  * three, defaulting to 64. Validation uses these tessellated boundaries.
  * @returns A new solid with caps and walls for all filled regions, including
  * disconnected components and through holes.
@@ -68,14 +69,18 @@ function profiles(sketch: Sketch, circleSegments: number): Point[][] {
  * @example
  * ```ts
  * const sketch = new Sketch().add(
- *   new Circle(new Point(0, 0), 5),
- *   new Circle(new Point(0, 0), 2),
+ *   new Circle({ center: { x: 0, y: 0 }, radius: 5 }),
+ *   new Circle({ center: { x: 0, y: 0 }, radius: 2 }),
  * );
- * const tube = extrude(sketch, [0, 0, 10], 32);
+ * const tube = extrude({ sketch, direction: [0, 0, 10], circleSegments: 32 });
  * const positions = tube.triangulate();
  * ```
  */
-export function extrude(sketch: Sketch, direction: ReadonlyVec3, circleSegments = 64): Solid {
+export function extrude({ sketch, direction, circleSegments = 64 }: {
+  sketch: Sketch;
+  direction: ReadonlyVec3;
+  circleSegments?: number;
+}): Solid {
   if (![direction[0], direction[1], direction[2]].every(Number.isFinite)) {
     throw new RangeError('Extrusion direction must be finite');
   }
@@ -108,14 +113,14 @@ export function extrude(sketch: Sketch, direction: ReadonlyVec3, circleSegments 
   const edge = (a: Vertex, b: Vertex): Edge => {
     const existing = edgeMap.get(a)?.get(b) ?? edgeMap.get(b)?.get(a);
     if (existing) return existing;
-    const result = new Edge(a, b);
+    const result = new Edge({ start: a, end: b });
     if (!edgeMap.has(a)) edgeMap.set(a, new Map());
     edgeMap.get(a)!.set(b, result);
     return result;
   };
   const face = (boundaries: Vertex[][]) => {
     const edges = boundaries.flatMap((loop) => loop.map((a, i) => edge(a, loop[(i + 1) % loop.length])));
-    faces.push(new Face(boundaries[0], boundaries.slice(1), edges));
+    faces.push(new Face({ outer: boundaries[0], holes: boundaries.slice(1), edges }));
   };
 
   loops.forEach((outer, index) => {
@@ -123,7 +128,7 @@ export function extrude(sketch: Sketch, direction: ReadonlyVec3, circleSegments 
     const region = [outer, ...loops.filter((_, i) => parents[i] === index)];
     const oriented = region.map((loop, i) => (signedArea(loop) > 0) === (i === 0) ? [...loop] : [...loop].reverse());
     const bottom = oriented.map((loop) => loop.map((point) => sketch.plane.toWorld(point)));
-    const top = bottom.map((loop) => loop.map((vertex) => new Vertex(vec3.add([0, 0, 0], vertex.position, direction))));
+    const top = bottom.map((loop) => loop.map((vertex) => validateVertex({ position: vec3.add([0, 0, 0], vertex.position, direction) })));
     face(depth > 0 ? bottom.map((loop) => [...loop].reverse()) : bottom);
     face(depth > 0 ? top : top.map((loop) => [...loop].reverse()));
     bottom.forEach((loop, i) => loop.forEach((a, j) => {
@@ -132,5 +137,5 @@ export function extrude(sketch: Sketch, direction: ReadonlyVec3, circleSegments 
       face([depth > 0 ? side : side.reverse()]);
     }));
   });
-  return new Solid(faces);
+  return new Solid({ faces });
 }

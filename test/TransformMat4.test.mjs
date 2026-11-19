@@ -13,7 +13,7 @@ class Triangle extends Memo {
 test('transforms all child geometry, caches it, and preserves child arrays', () => {
   assert.equal(DirectTransformMat4, TransformMat4);
   const matrix = mat4.fromTranslation(mat4.create(), [2, 3, 4]);
-  const node = new TransformMat4(matrix);
+  const node = new TransformMat4({ matrix });
   assert.ok(node instanceof Memo);
   const child = new Triangle();
   const original = child.triangulate();
@@ -40,8 +40,8 @@ test('transforms all child geometry, caches it, and preserves child arrays', () 
 });
 
 test('nested transforms apply the child transform before the parent transform', () => {
-  const parent = new TransformMat4(mat4.fromScaling(mat4.create(), [2, 2, 2]));
-  const child = new TransformMat4(mat4.fromTranslation(mat4.create(), [1, 0, 0]));
+  const parent = new TransformMat4({ matrix: mat4.fromScaling(mat4.create(), [2, 2, 2]) });
+  const child = new TransformMat4({ matrix: mat4.fromTranslation(mat4.create(), [1, 0, 0]) });
   child.children.push(new Triangle());
   parent.children.push(child);
 
@@ -51,7 +51,7 @@ test('nested transforms apply the child transform before the parent transform', 
 });
 
 test('an empty transform node produces a cached empty array', () => {
-  const node = new TransformMat4(mat4.create());
+  const node = new TransformMat4({ matrix: mat4.create() });
   const result = node.triangulate();
   assert.deepEqual(result, new Float32Array());
   assert.equal(node.triangulate(), result);

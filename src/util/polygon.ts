@@ -1,4 +1,4 @@
-import { Point } from '../Point.js';
+import { validatePoint, type Point } from '../Point.js';
 
 type Loop = readonly Point[];
 
@@ -160,7 +160,7 @@ export function triangulatePolygon(loops: readonly Loop[]): number[] {
   candidates.sort((a, b) => a.length - b.length);
   for (const { a, b } of candidates) {
     const start = points[a], end = points[b];
-    if (!inside(new Point((start.x + end.x) / 2, (start.y + end.y) / 2))) continue;
+    if (!inside(validatePoint({ x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }))) continue;
     if (points.some((p, i) => i !== a && i !== b && onSegment(start, end, p, tolerance.length, tolerance.area))) continue;
     if (edges.some(([c, d]) => c !== a && c !== b && d !== a && d !== b &&
         intersects(start, end, points[c], points[d], tolerance.length, tolerance.area))) continue;
@@ -178,7 +178,7 @@ export function triangulatePolygon(loops: readonly Loop[]): number[] {
         if (Math.abs(signed) <= tolerance.area) continue;
         const order = signed > 0 ? [a, b, c] : [a, c, b];
         const [p, q, r] = order.map((i) => points[i]);
-        if (!inside(new Point((p.x + q.x + r.x) / 3, (p.y + q.y + r.y) / 3))) continue;
+        if (!inside(validatePoint({ x: (p.x + q.x + r.x) / 3, y: (p.y + q.y + r.y) / 3 }))) continue;
         if (points.some((s, i) => i !== a && i !== b && i !== c &&
             cross(p, q, s) > tolerance.area && cross(q, r, s) > tolerance.area && cross(r, p, s) > tolerance.area)) continue;
         triangles.push(...(signedArea(outer) > 0 ? order : order.reverse()));

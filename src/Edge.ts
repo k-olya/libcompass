@@ -1,5 +1,5 @@
 import { vec3 } from 'gl-matrix';
-import { Vertex } from './Vertex.js';
+import { validateVertex, type Vertex } from './Vertex.js';
 
 /**
  * A straight boundary edge referencing two world-space vertices.
@@ -9,19 +9,19 @@ import { Vertex } from './Vertex.js';
  * order supplies orientation; the edge's own endpoint order need not match it.
  */
 export class Edge {
+  /** Vertex at parameter zero, retained by reference. */
+  readonly start: Vertex;
+  /** Vertex at parameter one, retained by reference. */
+  readonly end: Vertex;
   /**
    * Create an edge, retaining both vertex identities.
    *
-   * @param start - Vertex at parameter zero.
-   * @param end - Vertex at parameter one.
-   * @throws {@link RangeError} if the endpoints have identical positions.
+   * @param options - Start and end vertices, retained by reference.
+   * @throws {@link RangeError} if the endpoints are nonfinite or have identical positions.
    */
-  constructor(
-    /** Vertex at parameter zero. */
-    public readonly start: Vertex,
-    /** Vertex at parameter one. */
-    public readonly end: Vertex
-  ) {
+  constructor({ start, end }: { start: Vertex; end: Vertex }) {
+    this.start = validateVertex(start);
+    this.end = validateVertex(end);
     if (vec3.exactEquals(start.position, end.position)) {
       throw new RangeError('An edge needs distinct endpoints');
     }
@@ -36,6 +36,21 @@ export class Edge {
    * @throws {@link RangeError} if the resulting coordinates are not finite.
    */
   at(t: number): Vertex {
-    return new Vertex(vec3.lerp([0, 0, 0], this.start.position, this.end.position, t));
+    return validateVertex({ position: vec3.lerp([0, 0, 0], this.start.position, this.end.position, t) });
   }
 }
+
+/**
+ * Create an edge, retaining both vertex identities.
+ *
+ * Constructor shorthand for `new Edge(options)`; returns a new {@link Edge} instance.
+ *
+ * @param options - Start and end vertices, retained by reference.
+ * @throws {@link RangeError} if the endpoints are nonfinite or have identical positions.
+ */
+export function edge(options: {
+  /** Vertex at parameter zero, retained by reference. */
+  start: Vertex;
+  /** Vertex at parameter one, retained by reference. */
+  end: Vertex;
+}): Edge { return new Edge(options); }

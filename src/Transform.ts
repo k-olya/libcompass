@@ -30,7 +30,7 @@ export class Transform extends TransformMat4 {
 
   /** Create an identity transform with independent XYZ property objects and no children. */
   constructor() {
-    super(mat4.create());
+    super({ matrix: mat4.create() });
   }
 
   /**
@@ -50,3 +50,10 @@ export class Transform extends TransformMat4 {
     return super.triangulateUncached();
   }
 }
+
+/**
+ * Create an identity transform with independent XYZ property objects and no children.
+ *
+ * Constructor shorthand for `new Transform()`; returns a new {@link Transform} instance.
+ */
+export function transform(): Transform { return new Transform(); }

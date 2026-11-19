@@ -1,7 +1,7 @@
 import { Edge } from './Edge.js';
 import { Face } from './Face.js';
 import { Memo } from './Memo.js';
-import { Vertex } from './Vertex.js';
+import type { Vertex } from './Vertex.js';
 
 /**
  * A memoized scene node with boundary topology, potentially containing disconnected components.
@@ -27,9 +27,9 @@ export class Solid extends Memo {
   /**
    * Collect faces and their shared boundary topology.
    *
-   * @param faces - Faces to retain; the input array is shallow-copied.
+   * @param options - Faces to retain; the input array is shallow-copied.
    */
-  constructor(faces: readonly Face[]) {
+  constructor({ faces }: { faces: readonly Face[] }) {
     super();
     this.faces = [...faces];
     this.vertices = [...new Set(faces.flatMap((face) => face.vertices))];
@@ -54,3 +54,15 @@ export class Solid extends Memo {
     return positions;
   }
 }
+
+/**
+ * Collect faces and their shared boundary topology.
+ *
+ * Constructor shorthand for `new Solid(options)`; returns a new {@link Solid} instance.
+ *
+ * @param options - Faces to retain; the input array is shallow-copied.
+ */
+export function solid(options: {
+  /** Faces in construction order, retaining their identities. */
+  faces: readonly Face[];
+}): Solid { return new Solid(options); }

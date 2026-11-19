@@ -1,7 +1,7 @@
 import { vec3 } from 'gl-matrix';
 import { Edge } from './Edge.js';
 import { Plane } from './Plane.js';
-import { Vertex } from './Vertex.js';
+import { validateVertex, type Vertex } from './Vertex.js';
 import { signedArea, triangulatePolygon } from './util/polygon.js';
 
 /**
@@ -28,33 +28,38 @@ export class Face {
   /**
    * Create and validate a planar face.
    *
-   * @param outer - Simple outer loop containing at least three noncollinear
-   * vertices. Its winding determines face orientation.
-   * @param holes - Simple, disjoint loops strictly inside the outer loop;
-   * their winding does not affect triangulation. Defaults to no holes.
-   * @param edges - Optional shared edges matching successive vertex pairs in
-   * outer-then-holes order, in either endpoint direction. Omit to create edges.
+   * @remarks
+   * The outer loop needs at least three noncollinear vertices. Holes must be
+   * simple, disjoint, and strictly inside it; they default to an empty array.
+   * Supplied edges must match successive loop vertices in either direction.
+   * Omit edges to create new boundary edges.
+   *
+   * @param options - Outer loop, optional disjoint hole loops, and optional shared
+   * edges in outer-then-holes order. Outer winding determines face orientation.
    * @throws {@link RangeError} if the boundaries are degenerate, nonplanar,
    * intersecting, touching, or incorrectly nested; edges do not match; or
    * triangulation fails at the current numeric tolerance.
    */
-  constructor(outer: readonly Vertex[], holes: readonly (readonly Vertex[])[] = [], edges?: readonly Edge[]) {
+  constructor({ outer, holes = [], edges }: {
+    outer: readonly Vertex[]; holes?: readonly (readonly Vertex[])[]; edges?: readonly Edge[];
+  }) {
     if (outer.length < 3) throw new RangeError('A face needs at least three outer vertices');
     this.outer = [...outer];
     this.holes = holes.map((hole) => [...hole]);
     const loops = [this.outer, ...this.holes];
     this.vertices = loops.flat();
+    this.vertices.forEach(validateVertex);
 
     let plane: Plane | undefined;
     for (let i = 1; i + 1 < outer.length; i++) {
       const a = vec3.subtract([0, 0, 0], outer[i].position, outer[0].position);
       const b = vec3.subtract([0, 0, 0], outer[i + 1].position, outer[0].position);
       if (vec3.length(vec3.cross([0, 0, 0], a, b)) > 0) {
-        const candidate = new Plane(outer[0], outer[i], outer[i + 1]);
+        const candidate = new Plane({ a: outer[0], b: outer[i], c: outer[i + 1] });
         // A concave boundary can begin with a reflex corner. Orient the frame
         // using the entire loop, rather than just its first noncollinear triple.
         plane = signedArea(outer.map((vertex) => candidate.toLocal(vertex))) > 0
-          ? candidate : new Plane(outer[0], outer[i + 1], outer[i]);
+          ? candidate : new Plane({ a: outer[0], b: outer[i + 1], c: outer[i] });
         break;
       }
     }
@@ -67,7 +72,7 @@ export class Face {
       !((edges[i].start === a && edges[i].end === b) || (edges[i].start === b && edges[i].end === a))))) {
       throw new RangeError('Face edges must match its boundary vertices');
     }
-    this.edges = edges ? [...edges] : boundaries.map(([a, b]) => new Edge(a, b));
+    this.edges = edges ? [...edges] : boundaries.map(([a, b]) => new Edge({ start: a, end: b }));
   }
 
   /**
@@ -82,3 +87,29 @@ export class Face {
     return positions;
   }
 }
+
+/**
+ * Create and validate a planar face.
+ *
+ * Constructor shorthand for `new Face(options)`; returns a new {@link Face} instance.
+ *
+ * @remarks
+ * The outer loop needs at least three noncollinear vertices. Holes must be
+ * simple, disjoint, and strictly inside it; they default to an empty array.
+ * Supplied edges must match successive loop vertices in either direction.
+ * Omit edges to create new boundary edges.
+ *
+ * @param options - Outer loop, optional disjoint hole loops, and optional shared
+ * edges in outer-then-holes order. Outer winding determines face orientation.
+ * @throws {@link RangeError} if the boundaries are degenerate, nonplanar,
+ * intersecting, touching, or incorrectly nested; edges do not match; or
+ * triangulation fails at the current numeric tolerance.
+ */
+export function face(options: {
+  /** Ordered outer boundary of at least three noncollinear vertices, without a repeated closing vertex. Winding determines orientation. */
+  outer: readonly Vertex[];
+  /** Disjoint hole loops strictly inside the outer boundary, without repeated closing vertices; defaults to an empty array. */
+  holes?: readonly (readonly Vertex[])[];
+  /** Shared edges in outer-then-holes order, matching successive vertices in either direction. Omit to create new boundary edges. */
+  edges?: readonly Edge[];
+}): Face { return new Face(options); }

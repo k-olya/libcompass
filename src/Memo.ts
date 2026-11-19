@@ -42,3 +42,15 @@ export class Memo extends Node {
     return super.triangulate();
   }
 }
+
+/**
+ * A node that caches triangulation until explicitly refreshed.
+ *
+ * Constructor shorthand for `new Memo()`; returns a new {@link Memo} instance.
+ *
+ * @remarks
+ * Geometry-producing node subclasses override the protected
+ * {@link Memo.triangulateUncached} hook instead of the public triangulate method.
+ * Changes to children or geometry do not automatically invalidate the cache.
+ */
+export function memo(): Memo { return new Memo(); }

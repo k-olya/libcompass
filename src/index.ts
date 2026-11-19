@@ -9,20 +9,20 @@
  *
  * @packageDocumentation
  */
-export { Node } from './Node.js';
-export { Memo } from './Memo.js';
-export { TransformMat4 } from './TransformMat4.js';
-export { Transform } from './Transform.js';
+export { Node, node } from './Node.js';
+export { Memo, memo } from './Memo.js';
+export { TransformMat4, transformMat4Node } from './TransformMat4.js';
+export { Transform, transform } from './Transform.js';
 export { functionalize } from './util/functionalize.js';
 export { transformMat4 } from './util/transformMat4.js';
-export { Point } from './Point.js';
-export { Line } from './Line.js';
-export { LineSegment } from './LineSegment.js';
-export { Circle } from './Circle.js';
-export { Plane } from './Plane.js';
-export { Sketch, type SketchElement } from './Sketch.js';
-export { Vertex } from './Vertex.js';
-export { Edge } from './Edge.js';
-export { Face } from './Face.js';
-export { Solid } from './Solid.js';
+export type { Point } from './Point.js';
+export { Line, line } from './Line.js';
+export { LineSegment, lineSegment } from './LineSegment.js';
+export { Circle, circle } from './Circle.js';
+export { Plane, plane } from './Plane.js';
+export { Sketch, sketch, type SketchElement } from './Sketch.js';
+export type { Vertex } from './Vertex.js';
+export { Edge, edge } from './Edge.js';
+export { Face, face } from './Face.js';
+export { Solid, solid } from './Solid.js';
 export { extrude } from './extrude.js';

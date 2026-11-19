@@ -1,5 +1,5 @@
 import type { ReadonlyVec2 } from 'gl-matrix';
-import { Point } from './Point.js';
+import { validatePoint, type Point } from './Point.js';
 
 /**
  * An infinite construction line defined by a point and a direction vector.
@@ -9,21 +9,19 @@ import { Point } from './Point.js';
  * normalization; its magnitude determines the spacing of parameter values.
  */
 export class Line {
+  /** Point at parameter zero, retained by reference. */
+  readonly point: Point;
   /** Copied local XY direction vector. */
   readonly direction: ReadonlyVec2;
 
   /**
    * Create an infinite line in sketch coordinates.
    *
-   * @param point - Point at parameter zero.
-   * @param direction - Finite, nonzero local XY vector.
-   * @throws {@link RangeError} if the direction is zero or not finite.
+   * @param options - Point at parameter zero and a finite, nonzero local XY direction.
+   * @throws {@link RangeError} if the point or direction is nonfinite, or the direction is zero.
    */
-  constructor(
-    /** Point at parameter zero. */
-    public readonly point: Point,
-    direction: ReadonlyVec2
-  ) {
+  constructor({ point, direction }: { point: Point; direction: ReadonlyVec2 }) {
+    this.point = validatePoint(point);
     if (![direction[0], direction[1]].every(Number.isFinite) || Math.hypot(direction[0], direction[1]) === 0) {
       throw new RangeError('Line direction must be finite and nonzero');
     }
@@ -38,6 +36,21 @@ export class Line {
    * @throws {@link RangeError} if the resulting coordinates are not finite.
    */
   at(t: number): Point {
-    return new Point(this.point.x + t * this.direction[0], this.point.y + t * this.direction[1]);
+    return validatePoint({ x: this.point.x + t * this.direction[0], y: this.point.y + t * this.direction[1] });
   }
 }
+
+/**
+ * Create an infinite line in sketch coordinates.
+ *
+ * Constructor shorthand for `new Line(options)`; returns a new {@link Line} instance.
+ *
+ * @param options - Point at parameter zero and a finite, nonzero local XY direction.
+ * @throws {@link RangeError} if the point or direction is nonfinite, or the direction is zero.
+ */
+export function line(options: {
+  /** Point at parameter zero, retained by reference. */
+  point: Point;
+  /** Copied local XY direction vector. */
+  direction: ReadonlyVec2;
+}): Line { return new Line(options); }

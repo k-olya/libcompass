@@ -10,16 +10,16 @@ import { transformMat4 } from './util/transformMat4.js';
  * to apply changes on the next triangulation; cached ancestors also need refresh.
  */
 export class TransformMat4 extends Memo {
+  /** Transformation matrix; refresh this node after changing it. */
+  matrix: ReadonlyMat4;
   /**
    * Create a transform node with no children.
    *
-   * @param matrix - gl-matrix column-major transformation, retained by reference.
+   * @param options - gl-matrix column-major transformation matrix, retained by reference.
    */
-  constructor(
-    /** Transformation matrix; refresh this node after changing it. */
-    public matrix: ReadonlyMat4
-  ) {
+  constructor({ matrix }: { matrix: ReadonlyMat4 }) {
     super();
+    this.matrix = matrix;
   }
 
   /**
@@ -32,3 +32,15 @@ export class TransformMat4 extends Memo {
     return transformMat4(super.triangulateUncached(), this.matrix);
   }
 }
+
+/**
+ * Create a transform node with no children.
+ *
+ * Constructor shorthand for `new TransformMat4(options)`; returns a new {@link TransformMat4} instance.
+ *
+ * @param options - gl-matrix column-major transformation matrix, retained by reference.
+ */
+export function transformMat4Node(options: {
+  /** Transformation matrix; refresh this node after changing it. */
+  matrix: ReadonlyMat4;
+}): TransformMat4 { return new TransformMat4(options); }

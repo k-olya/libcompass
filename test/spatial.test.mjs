@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { Circle, Edge, Face, Plane, Sketch, Solid, SpatialCurve, SpatialSurface, Surface, TRIANGULATION_RESOLUTION, spatialCurve, spatialSurface } from 'libcompass';
 
 const close = (actual, expected, tolerance = 1e-11) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected}`);
-const rim = (radius, z = 0) => SpatialCurve.fromCircle({ circle: new Circle({ center: { x: 0, y: 0 }, radius }), plane: new Plane({ a: [0, 0, z], b: [1, 0, z], c: [0, 1, z] }) });
+const rim = (radius, z = 0) => SpatialCurve.fromPlanarCurve({ curve: new Circle({ center: { x: 0, y: 0 }, radius }), plane: new Plane({ a: [0, 0, z], b: [1, 0, z], c: [0, 1, z] }) });
 
 function assertWatertight(positions) {
   const edges = new Map();

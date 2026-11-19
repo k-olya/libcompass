@@ -96,8 +96,8 @@ test('sketch entities retain their mathematical definitions and can be evaluated
   assert.equal(segment.start, point);
   assert.deepEqual(segment.at(0.25), { x: 4, y: -1 });
   const circle = new Circle({ center: point, radius: 2 });
-  close(circle.at(Math.PI / 2).x, 3);
-  close(circle.at(Math.PI / 2).y, 0);
+  close(circle.at(0.25).x, 3);
+  close(circle.at(0.25).y, 0);
   assert.ok(circle.sample().length > 12);
   assert.throws(() => new Circle({ center: { x: NaN, y: 0 }, radius: 1 }), RangeError);
   assert.throws(() => new Line({ point, direction: [0, 0] }), RangeError);
@@ -172,7 +172,7 @@ test('circles remain analytic through extrusion and are faceted only when triang
   assert.equal(solid.surfaces.length, 4);
   assert.ok(solid.boundaries.every(boundary => boundary instanceof SpatialCurve && boundary.isLoop()));
   const area = [3, 1].reduce((sum, radius, i) => {
-    const count = new Circle({ center: { x: 0, y: 0 }, radius }).sample().length;
+    const count = new Circle({ center: { x: 0, y: 0 }, radius }).sample().length - 1;
     return sum + (i ? -1 : 1) * count / 2 * radius ** 2 * Math.sin(2 * Math.PI / count);
   }, 0);
   checkSolid(solid, area * 5);

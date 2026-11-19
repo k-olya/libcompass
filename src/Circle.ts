@@ -1,14 +1,16 @@
 import { validatePoint, type Point } from './Point.js';
-import { circleSegments } from './triangulation.js';
+import { PlanarCurve } from './PlanarCurve.js';
 
 /**
- * An analytic circle in sketch coordinates, parameterized by angle in radians.
+ * An analytic planar curve tracing one counterclockwise circle on [0, 1].
  *
  * @remarks
  * The circle remains analytic through extrusion. Triangulation samples it at
  * the library-wide 0.001 chord-deviation resolution.
+ * at(0) and at(1) share the point at local +X; at(0.25) is a quarter turn.
+ * To evaluate an angle in radians, use at(angle / (2 * Math.PI)).
  */
-export class Circle {
+export class Circle extends PlanarCurve {
   /** Center in sketch coordinates, retained by reference. */
   readonly center: Point;
   /** Positive radius in model units. */
@@ -20,34 +22,18 @@ export class Circle {
    * @throws {@link RangeError} if the center is nonfinite or the radius is not positive and finite.
    */
   constructor({ center, radius }: { center: Point; radius: number }) {
-    this.center = validatePoint(center);
-    this.radius = radius;
+    validatePoint(center);
     if (!Number.isFinite(radius) || radius <= 0) {
       throw new RangeError('Circle radius must be positive and finite');
     }
-  }
-
-  /**
-   * Evaluate a point on the circle.
-   *
-   * @param angle - Angle in radians, measured counterclockwise from local +X.
-   * @returns A new point in sketch coordinates.
-   * @throws {@link RangeError} if the resulting coordinates are not finite.
-   */
-  at(angle: number): Point {
-    return validatePoint({ x: this.center.x + this.radius * Math.cos(angle), y: this.center.y + this.radius * Math.sin(angle) });
-  }
-
-  /**
-   * Sample one counterclockwise polygonal boundary.
-   *
-   * @returns New points at the library resolution, starting at angle zero,
-   * without repeating the closing point. Segment count is derived from radius.
-   * @throws {@link RangeError} if sampled coordinates are not finite.
-   */
-  sample(): Point[] {
-    const segments = circleSegments(this.radius);
-    return Array.from({ length: segments }, (_, i) => this.at(2 * Math.PI * i / segments));
+    const at = (t: number): Point => {
+      const angle = t === 1 ? 0 : t * 2 * Math.PI;
+      return { x: center.x + radius * Math.cos(angle), y: center.y + radius * Math.sin(angle) };
+    };
+    const start = at(0);
+    super({ at, start, end: start });
+    this.center = center;
+    this.radius = radius;
   }
 }
 

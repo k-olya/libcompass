@@ -4,6 +4,7 @@ import { Face } from './Face.js';
 import { Line } from './Line.js';
 import { LineSegment } from './LineSegment.js';
 import { Plane } from './Plane.js';
+import type { PlanarCurve } from './PlanarCurve.js';
 import type { Point } from './Point.js';
 import { extrude } from './extrude.js';
 import { Solid } from './Solid.js';
@@ -11,13 +12,14 @@ import { Edge } from './Edge.js';
 import { SpatialCurve } from './SpatialCurve.js';
 
 /** A drawable sketch entity; points and infinite lines are construction geometry. */
-export type SketchElement = Point | Line | LineSegment | Circle;
+export type SketchElement = Point | Line | LineSegment | PlanarCurve;
 
 /**
  * Local 2D drawing geometry placed on a plane in world space.
  *
  * @remarks
- * Closed segment loops and circles define profiles. Nesting uses even-odd fill
+ * Sketches can store any planar curve. Extrusion currently supports closed
+ * segment loops and circles as profiles. Nesting uses even-odd fill
  * to distinguish material, holes, and islands; points and infinite lines are
  * construction geometry. Segment endpoints match by exact XY coordinates.
  *
@@ -85,6 +87,7 @@ export class Sketch {
    * along the plane normal; its magnitude is not normalized.
    * @returns An analytic solid snapshot with shared boundaries and surfaces.
    * @throws {@link RangeError} if the direction or profiles are invalid.
+   * @throws {@link TypeError} if a noncircular planar curve is present.
    * @see {@link extrude}
    */
   extrude({ direction }: { direction: ReadonlyVec3 }): Solid {

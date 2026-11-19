@@ -32,6 +32,7 @@ import { profileAnchor, profileArea, profileContains, sketchProfiles, type Profi
  * @returns A solid with planar caps and exact planar or ruled side surfaces.
  * @throws {@link RangeError} if direction or profiles are invalid, open,
  * branched, degenerate, intersecting, or touching.
+ * @throws {@link TypeError} if a noncircular planar curve is present.
  *
  * @example
  * ```ts
@@ -69,8 +70,8 @@ export function extrude({ sketch, direction }: { sketch: Sketch; direction: Read
   const surfaces: Surface[] = [];
   const lift = (profile: Profile, hole: boolean): { bottom: SpatialBoundary[]; top: SpatialBoundary[]; sides: Face | SpatialSurface }[] => {
     if (profile.circle) {
-      const bottom = SpatialCurve.fromCircle({ circle: profile.circle, plane: bottomFrame });
-      const top = SpatialCurve.fromCircle({ circle: profile.circle, plane: topFrame });
+      const bottom = SpatialCurve.fromPlanarCurve({ curve: profile.circle, plane: bottomFrame });
+      const top = SpatialCurve.fromPlanarCurve({ curve: profile.circle, plane: topFrame });
       return [{ bottom: [bottom], top: [top], sides: new SpatialSurface({ start: bottom, end: top, reversed: (depth < 0) !== hole }) }];
     }
     const points = (signedArea(profile.points) > 0) !== hole ? profile.points : [...profile.points].reverse();

@@ -1,5 +1,6 @@
 import { Circle } from './Circle.js';
 import { Plane } from './Plane.js';
+import { PlanarCurve } from './PlanarCurve.js';
 import type { SpatialBoundary } from './SpatialBoundary.js';
 import { validateVertex, type Vertex } from './Vertex.js';
 import { curveParameters } from './util/curveSampling.js';
@@ -9,14 +10,14 @@ import { curveParameters } from './util/curveSampling.js';
  *
  * @remarks
  * The evaluator defines the parameterization; it need not have constant speed.
- * Circular curves made with fromCircle traverse a fraction of the circumference.
+ * Circular curves made with fromPlanarCurve traverse a fraction of the circumference.
  * Geometry is retained analytically; sample() alone produces a polyline.
  */
 export class SpatialCurve implements SpatialBoundary {
   readonly start: Vertex;
   readonly end: Vertex;
   private readonly evaluate: (t: number) => Vertex;
-  private circular?: { circle: Circle; plane: Plane };
+  private planar?: { curve: PlanarCurve; plane: Plane };
 
   /**
    * Create a parametric curve without tessellating it.
@@ -40,27 +41,35 @@ export class SpatialCurve implements SpatialBoundary {
     }
   }
 
-  /** Circular definition, when constructed with fromCircle; absent for procedural curves. */
-  get circle(): Circle | undefined { return this.circular?.circle; }
-  /** Frame of the circular definition; this does not make the curve a sketch plane. */
-  get plane(): Plane | undefined { return this.circular?.plane; }
+  /** Local definition, when constructed with fromPlanarCurve. */
+  get planarCurve(): PlanarCurve | undefined { return this.planar?.curve; }
+  /** Exact circular definition, when the local planar curve is a Circle. */
+  get circle(): Circle | undefined { return this.planar?.curve instanceof Circle ? this.planar.curve : undefined; }
+  /** Frame of the planar definition; this does not make the curve a sketch plane. */
+  get plane(): Plane | undefined { return this.planar?.plane; }
 
   /**
-   * Lift an analytic circle into world space, preserving its exact radius.
+   * Lift any planar curve into world space without sampling it.
    *
-   * @param options - Circle and placement plane; defaults to world XY.
-   * @returns A closed curve whose endpoints are the same vertex object.
+   * @remarks
+   * The placement frame and circular parameters are copied. Other planar curves
+   * retain their evaluator; treat its captured geometry as immutable.
+   * @param options - Planar curve and placement plane; defaults to world XY.
+   * @returns An exact curve with the same [0, 1] parameterization. Loops share
+   * one endpoint vertex; open curves retain distinct endpoints.
+   * @throws {@link TypeError} if curve is not a PlanarCurve.
    */
-  static fromCircle({ circle, plane = new Plane() }: { circle: Circle; plane?: Plane }): SpatialCurve {
-    const definition = new Circle({ center: { ...circle.center }, radius: circle.radius });
+  static fromPlanarCurve({ curve, plane = new Plane() }: { curve: PlanarCurve; plane?: Plane }): SpatialCurve {
+    if (!(curve instanceof PlanarCurve)) throw new TypeError('A spatial curve needs a PlanarCurve to lift');
+    const definition = curve instanceof Circle ? new Circle({ center: { ...curve.center }, radius: curve.radius }) : curve;
     const frame = new Plane({ a: [...plane.origin] as [number, number, number],
       b: Array.from(plane.origin).map((value, i) => value + plane.xAxis[i]) as [number, number, number],
       c: Array.from(plane.origin).map((value, i) => value + plane.yAxis[i]) as [number, number, number] });
-    const at = (t: number) => frame.toWorld(definition.at((t === 1 ? 0 : t) * 2 * Math.PI));
+    const at = (t: number) => frame.toWorld(definition.at(t));
     const start = at(0);
-    const curve = new SpatialCurve({ at, start, end: start });
-    curve.circular = { circle: definition, plane: frame };
-    return curve;
+    const spatial = new SpatialCurve({ at, start, end: definition.isLoop() ? start : at(1) });
+    spatial.planar = { curve: definition, plane: frame };
+    return spatial;
   }
 
   /**

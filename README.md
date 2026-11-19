@@ -53,7 +53,8 @@ Points and infinite lines are construction geometry and do not create boundaries
 | `Vertex` — `{ position: [x, y, z] }` | An interface for a shared world-space vertex. |
 | `new Line({ point, direction })` | An infinite line with a `ReadonlyVec2` direction; `at(t)` returns `point + t * direction`. |
 | `new LineSegment({ start, end })` | Two endpoints; `at(0)` and `at(1)` return their coordinates. |
-| `new Circle({ center, radius })` | An analytic circle; `at(angle)` uses radians, `sample()` derives a polygon from radius and the library resolution. |
+| `new PlanarCurve({ at, start, end })` | An exact local XY curve on [0, 1], with optional shared endpoints. |
+| `new Circle({ center, radius })` | An analytic `PlanarCurve`; `at(t)` traces one counterclockwise turn on [0, 1]. |
 | `new Plane({ a, b, c })` | Three noncollinear world points, each a `Vertex` or `ReadonlyVec3`. Defaults to XY. |
 | `new Sketch({ plane })` | Local 2D geometry on a world-space plane; `add(...elements)` returns the sketch. |
 | `new Edge({ start, end })` | A boundary edge retaining its vertex objects. |
@@ -73,7 +74,7 @@ Utilities such as `functionalize` and `transformMat4` keep positional arguments.
 Every concrete class also has a lowercase constructor shorthand, exported from the root
 and its class module: `node`, `memo`, `transform`, `transformMat4Node`, `line`,
 `lineSegment`, `circle`, `plane`, `sketch`, `edge`, `face`, `solid`,
-`spatialCurve`, and `spatialSurface`. They return
+`planarCurve`, `spatialCurve`, and `spatialSurface`. They return
 ordinary class instances and accept the same options and defaults. The name
 `transformMat4Node` avoids a collision with the `transformMat4` utility.
 
@@ -105,14 +106,43 @@ surfaces retain the same boundary objects. Sampling never adds facets or vertice
 to this topology. A circular cylinder has three surfaces, two circular boundary
 loops, and two topological vertices, regardless of triangulation density.
 
-`SpatialBoundary` is the common interface implemented by edges and curves:
+`PlanarCurve` evaluates local XY `Point` objects, while `SpatialCurve` evaluates
+world-space `Vertex` objects. `Circle` extends `PlanarCurve`: `at(0)` is local +X,
+`at(0.25)` is a quarter turn, and `at(1)` returns the same closing point as `at(0)`.
+For angles in radians, use `circle.at(angle / (2 * Math.PI))`. Parameters outside
+[0, 1] are rejected. `planarCurve({ at: t => ({ x: t, y: t * t }) })` creates a
+general procedural planar curve without tessellation.
+
+`SpatialCurve.fromPlanarCurve({ curve, plane })` places any `PlanarCurve` on a
+world-space plane (XY by default), preserving its exact evaluator and normalized
+parameterization. It replaces `fromCircle({ circle, plane })`. The placement frame
+and circular parameters are copied; general evaluators retain their captured
+geometry, which should be treated as immutable. `planarCurve` and `plane` on the
+result expose the planar definition and placement; `circle` remains available
+when that definition is a `Circle`. This conversion does not sample the curve.
+`SketchElement` is `Point | Line | LineSegment | PlanarCurve`, including `Circle`
+through inheritance. Sketches retain general planar curves, but extrusion
+currently supports only segment profiles and circles; it rejects other planar
+curves explicitly. These curves can be lifted to form spatial boundaries and surfaces.
+
+`SpatialBoundary` is the common interface implemented by edges and spatial curves:
 `start`, `end`, `at(t)`, `sample()`, and `isLoop()`. A loop has identical start and
 end coordinates; no separate `Loop` class is needed. Curve `at(t)` accepts [0, 1],
 returns shared endpoint objects at zero and one, and uses the evaluator's
 parameterization. It is a circumference fraction for circular curves; procedural
 curves need not have constant speed. `sample()` includes both endpoints, even
-for a loop. `Circle.at(angle)` still takes radians and `Circle.sample()` omits the
-repeated closing point.
+for a loop. This closing-point convention applies to every curve, including
+`PlanarCurve.sample()` and `Circle.sample()`: loops always repeat the closing point.
+Circle sample counts are derived from radius and the library resolution.
+
+```ts
+import { Circle, Plane, SpatialCurve } from 'libcompass';
+
+const local = new Circle({ center: { x: 0, y: 0 }, radius: 5 });
+const quarterTurn = local.at(0.25);
+const rim = SpatialCurve.fromPlanarCurve({ curve: local, plane: new Plane() });
+const vertices = rim.sample(); // First and last vertices are the same loop endpoint.
+```
 
 `Surface.outer` and `Surface.holes` are ordered arrays of shared boundaries;
 traversal direction is inferred from their connected endpoints. `boundaries`

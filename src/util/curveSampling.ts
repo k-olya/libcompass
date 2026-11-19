@@ -1,24 +1,30 @@
 import type { SpatialCurve } from '../SpatialCurve.js';
+import type { PlanarCurve } from '../PlanarCurve.js';
+import { Circle } from '../Circle.js';
+import type { Point } from '../Point.js';
+import type { Vertex } from '../Vertex.js';
 import { circleSegments, TRIANGULATION_RESOLUTION } from '../triangulation.js';
 
-const cache = new WeakMap<SpatialCurve, Map<number, readonly number[]>>();
+const cache = new WeakMap<PlanarCurve | SpatialCurve, Map<number, readonly number[]>>();
+const coordinates = (point: Point | Vertex): readonly number[] => 'position' in point ? Array.from(point.position) : [point.x, point.y];
 
 /** Tessellation parameters shared by standalone sampling and surface meshes. */
-export function curveParameters(curve: SpatialCurve, resolution = TRIANGULATION_RESOLUTION): readonly number[] {
+export function curveParameters(curve: PlanarCurve | SpatialCurve, resolution = TRIANGULATION_RESOLUTION): readonly number[] {
   const cached = cache.get(curve) ?? new Map<number, readonly number[]>();
   const existing = cached.get(resolution);
   if (existing) return existing;
   let parameters: number[];
-  if (curve.circle) {
-    const count = circleSegments(curve.circle.radius, resolution);
+  const circle = curve instanceof Circle ? curve : 'circle' in curve ? curve.circle : undefined;
+  if (circle) {
+    const count = circleSegments(circle.radius, resolution);
     parameters = Array.from({ length: count + 1 }, (_, i) => i / count);
   } else {
     parameters = [0];
     const refine = (a: number, b: number, depth: number): void => {
-      const start = curve.at(a).position, end = curve.at(b).position;
+      const start = coordinates(curve.at(a)), end = coordinates(curve.at(b));
       const error = Math.max(...[0.25, 0.5, 0.75].map(fraction => {
-        const point = curve.at(a + (b - a) * fraction).position;
-        return Math.hypot(...Array.from(point).map((value, i) => value - (start[i] + (end[i] - start[i]) * fraction)));
+        const point = coordinates(curve.at(a + (b - a) * fraction));
+        return Math.hypot(...point.map((value, i) => value - (start[i] + (end[i] - start[i]) * fraction)));
       }));
       if (error > resolution) {
         if (depth >= 20) throw new RangeError('Curve cannot be sampled at the triangulation resolution');

@@ -1,5 +1,6 @@
 import { Circle } from '../Circle.js';
 import { LineSegment } from '../LineSegment.js';
+import { PlanarCurve } from '../PlanarCurve.js';
 import type { Point } from '../Point.js';
 import type { Sketch } from '../Sketch.js';
 import { containsPoint, signedArea, validateLoops } from './polygon.js';
@@ -15,6 +16,9 @@ export const profileContains = (profile: Profile, point: Point): boolean => prof
 
 /** Assemble segment loops and classify circle intersections analytically. */
 export function sketchProfiles(sketch: Sketch): Profile[] {
+  if (sketch.elements.some(element => element instanceof PlanarCurve && !(element instanceof Circle))) {
+    throw new TypeError('Extrusion currently supports only circular planar curves');
+  }
   const circles = sketch.elements.filter((element): element is Circle => element instanceof Circle)
     .map(circle => new Circle({ center: { ...circle.center }, radius: circle.radius }));
   const segments = new Set(sketch.elements.filter((element): element is LineSegment => element instanceof LineSegment));

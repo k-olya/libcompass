@@ -9,9 +9,14 @@
 - Put private geometry implementation helpers in `src/internal/`; they are not
   public operations or general utilities. Keep math-object classes and interfaces
   in `src/`, with constructor shorthands beside their classes.
+- Put shared default objects in `src/defaults/` and re-export them from the root.
+  Defaults are instances or values, not constructor shorthands. Treat shared
+  defaults and their coordinate arrays as immutable. Plane names specify local
+  axis order: `XY` uses X/Y, `ZX` uses Z/X, and `YZ` uses Y/Z. `X`, `Y`, and `Z`
+  are unit vectors, not axis classes.
 - Keep API documentation grouped into Classes (including interfaces and types),
-  Shorthands, Operations, and Util, matching these distinctions. Classify public
-  operations from their `operations/` module location.
+  Shorthands, Operations, Defaults, and Util, matching these distinctions.
+  Classify public operations and defaults from their module locations.
 
 # Geometry conventions
 
@@ -20,6 +25,10 @@
 - Sketches may contain multiple closed profiles, holes, and islands. Use nesting
   (even-odd fill) to determine material. Points and infinite lines are construction
   geometry and do not bound a profile.
+- Extrusion takes a finite, nonzero signed `length` and an optional finite,
+  nonzero `axis` defaulting to the sketch plane normal. Normalize the axis
+  internally without mutating it; displacement is `normalize(axis) * length`.
+  Negative lengths reverse extrusion. The axis must leave the sketch plane.
 - Preserve shared vertex and edge identities in solids so topology can be reused
   for further operations. Curves remain mathematical through extrusion. Profile
   analysis may use temporary sampled polylines; triangulation generates the

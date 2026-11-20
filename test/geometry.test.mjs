@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { vec3 } from 'gl-matrix';
 import {
   Circle, Edge, Face, Line, LineSegment, Plane, Sketch, Solid, SpatialCurve, SpatialSurface, extrude,
 } from 'libcompass';
@@ -123,7 +124,7 @@ test('planes defined by three points map between sketch and world coordinates', 
 test('concave profiles extrude obliquely without filling their concavities', () => {
   const sketch = polygon(new Sketch(), [[0, 0], [4, 0], [4, 1], [1, 1], [1, 4], [0, 4]], true);
   sketch.add({ x: 99, y: 99 }, new Line({ point: { x: 0, y: 0 }, direction: [1, 1] }));
-  const solid = extrude({ sketch, direction: [0.5, -0.25, 3] });
+  const solid = extrude({ sketch, axis: vec3.normalize([0, 0, 0], [0.5, -0.25, 3]), length: Math.hypot(0.5, -0.25, 3) });
   checkSolid(solid, 21);
   assert.equal(solid.vertices.length, 12);
   assert.equal(solid.boundaries.length, 18);
@@ -133,7 +134,7 @@ test('concave profiles extrude obliquely without filling their concavities', () 
 test('a concave boundary beginning at a reflex corner has a consistent face plane', () => {
   const points = [[4, 1], [1, 1], [1, 4], [0, 4], [0, 0], [4, 0]].map(([x, y]) => ({ x, y }));
   const sketch = new Sketch().add(...points.map((point, i) => new LineSegment({ start: point, end: points[(i + 1) % points.length] })));
-  const solid = sketch.extrude({ direction: [0, 0, 3] });
+  const solid = sketch.extrude({ length: 3 });
   checkSolid(solid, 21);
   const top = solid.surfaces.find((face) => face.outer.length === 6 && face.plane.normal[2] > 0);
   assert.ok(top);
@@ -149,7 +150,7 @@ test('multiple profiles, multiple holes, and nested islands use even-odd fill', 
   rectangle(sketch, 1.5, 1.5, 1, 1); // island inside the first hole
   rectangle(sketch, 0, 0, 10, 10, true);
   rectangle(sketch, 6, 2, 3, 3);
-  const solid = sketch.extrude({ direction: [0, 0, 2] });
+  const solid = sketch.extrude({ length: 2 });
   checkSolid(solid, (100 - 4 - 9 + 1 + 4) * 2);
   assert.equal(solid.vertices.length, 40);
   assert.equal(solid.boundaries.length, 60);
@@ -174,7 +175,7 @@ test('circles remain analytic through extrusion and are faceted only when triang
   const sketch = new Sketch();
   const outer = new Circle({ center: { x: 0, y: 0 }, radius: 3 });
   sketch.add(outer, new Circle({ center: { x: 0, y: 0 }, radius: 1 }));
-  const solid = sketch.extrude({ direction: [0, 0, 5] });
+  const solid = sketch.extrude({ length: 5 });
   assert.equal(solid.vertices.length, 4);
   assert.equal(solid.boundaries.length, 4);
   assert.equal(solid.surfaces.length, 4);
@@ -193,36 +194,60 @@ test('circles remain analytic through extrusion and are faceted only when triang
   assert.equal(next.plane, top.plane);
   assert.deepEqual(next.elements, []);
   next.add(...sketch.elements);
-  checkSolid(next.extrude({ direction: [0, 0, 1] }), area);
+  checkSolid(next.extrude({ length: 1 }), area);
 });
 
 test('negative depth on a tilted plane still gives outward winding', () => {
   const plane = new Plane({ a: [0, 0, 2], b: [1, 0, 2], c: [0, 0, 3] });
   const sketch = rectangle(new Sketch({ plane }), 0, 0, 2, 3);
-  checkSolid(sketch.extrude({ direction: [0.5, 3, 1] }), 18);
+  checkSolid(sketch.extrude({ axis: vec3.normalize([0, 0, 0], [0.5, 3, 1]), length: Math.hypot(0.5, 3, 1) }), 18);
+});
+
+test('signed lengths multiply normalized axes without modifying the input', () => {
+  const plane = new Plane({ a: [2, 3, 4], b: [3, 3, 5], c: [2, 4, 5] });
+  const sketch = rectangle(new Sketch({ plane }), 0, 0, 2, 3);
+  const corners = [[0, 0], [2, 0], [2, 3], [0, 3]].map(([x, y]) => plane.toWorld({ x, y }).position);
+  for (const axis of [undefined, [0.6, 0, 0.8], [3, 0, 4], [3e-200, 0, 4e-200], [3e307, 0, 4e307]]) {
+    const original = axis?.slice();
+    for (const length of [3, -3]) {
+      const displacement = vec3.scale([0, 0, 0], axis ? [0.6, 0, 0.8] : plane.normal, length);
+      const expected = corners.flatMap(point => [point, vec3.add([0, 0, 0], point, displacement)]);
+      for (const body of [extrude({ sketch, axis, length }), sketch.extrude({ axis, length })]) {
+        checkSolid(body, 6 * Math.abs(vec3.dot(plane.normal, displacement)));
+        assert.equal(body.vertices.length, 8);
+        for (const point of expected) {
+          assert.ok(body.vertices.some(vertex => vec3.distance(point, vertex.position) < 1e-10));
+        }
+      }
+      assert.deepEqual(axis, original);
+    }
+  }
 });
 
 test('collinear boundary vertices are retained and triangulated correctly', () => {
   const sketch = polygon(new Sketch(), [[0, 0], [1, 0], [2, 0], [2, 2], [0, 2]]);
-  const solid = sketch.extrude({ direction: [0, 0, -2] });
+  const solid = sketch.extrude({ length: -2 });
   checkSolid(solid, 8);
   assert.equal(solid.vertices.length, 10);
 });
 
 test('invalid or ambiguous sketches and degenerate extrusions fail explicitly', () => {
   const square = () => rectangle(new Sketch(), 0, 0, 4, 4);
-  assert.throws(() => new Sketch().extrude({ direction: [0, 0, 1] }), /closed profile/);
+  assert.throws(() => new Sketch().extrude({ length: 1 }), /closed profile/);
   const open = new Sketch().add(new LineSegment({ start: { x: 0, y: 0 }, end: { x: 1, y: 0 } }));
-  assert.throws(() => open.extrude({ direction: [0, 0, 1] }), /closed/);
-  assert.throws(() => square().extrude({ direction: [0, 0, 0] }), /leave/);
-  assert.throws(() => square().extrude({ direction: [1, 1, 0] }), /leave/);
-  assert.throws(() => square().extrude({ direction: [0, 0, NaN] }), /finite/);
+  assert.throws(() => open.extrude({ length: 1 }), /closed/);
+  for (const length of [0, NaN, Infinity, -Infinity, undefined]) {
+    assert.throws(() => square().extrude({ length }), /length.*finite and nonzero/);
+  }
+  assert.throws(() => square().extrude({ axis: [0, 0, 0], length: 1 }), /nonzero/);
+  assert.throws(() => square().extrude({ axis: [Math.SQRT1_2, Math.SQRT1_2, 0], length: 1 }), /leave/);
+  assert.throws(() => square().extrude({ axis: [0, 0, NaN], length: 1 }), /finite/);
   const touching = rectangle(square(), 0, 1, 1, 1);
-  assert.throws(() => touching.extrude({ direction: [0, 0, 1] }), /intersect or touch/);
+  assert.throws(() => touching.extrude({ length: 1 }), /intersect or touch/);
   const crossing = polygon(new Sketch(), [[0, 0], [4, 4], [0, 3], [3, 0]]);
-  assert.throws(() => crossing.extrude({ direction: [0, 0, 1] }), /intersect/);
+  assert.throws(() => crossing.extrude({ length: 1 }), /intersect/);
   const branch = square().add(new LineSegment({ start: { x: 0, y: 0 }, end: { x: -1, y: 0 } }));
-  assert.throws(() => branch.extrude({ direction: [0, 0, 1] }), /unbranched/);
+  assert.throws(() => branch.extrude({ length: 1 }), /unbranched/);
   const vertex = { position: [0, 0, 0] };
   assert.throws(() => new Edge({ start: vertex, end: vertex }), RangeError);
   assert.throws(() => new Face({ outer: boundaries([vertex, { position: [1, 0, 0] }, { position: [1, 1, 0] }, { position: [0, 1, 1] }]) }), /plane/);
@@ -243,6 +268,6 @@ test('varied concave profiles with holes remain watertight with the expected vol
       const b = loop[(i + 1) % count];
       return sum + a[0] * b[1] - a[1] * b[0];
     }, 0)) / 2 - 0.25;
-    checkSolid(sketch.extrude({ direction: [0.2, -0.3, sample % 2 ? -2 : 2] }), area * 2);
+    checkSolid(sketch.extrude({ axis: vec3.normalize([0, 0, 0], [0.2, -0.3, 2]), length: (sample % 2 ? -1 : 1) * Math.hypot(0.2, -0.3, 2) }), area * 2);
   }
 });

@@ -36,9 +36,9 @@ const corners = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 6 }, { x: 0, y: 6 
 sketch.add(...corners.map((point, i) => new LineSegment({ start: point, end: corners[(i + 1) % 4] })));
 sketch.add(new Circle({ center: { x: 3, y: 3 }, radius: 1 }), new Circle({ center: { x: 7, y: 3 }, radius: 1 }));
 
-const body = extrude({ sketch, direction: [0, 0, 8] }); // Two exact circular through holes.
+const body = extrude({ sketch, length: 8 }); // Two exact circular through holes.
 const positions: Float32Array = body.triangulate();
-// Equivalent: sketch.extrude({ direction: [0, 0, 8] }).
+// Equivalent: sketch.extrude({ length: 8 }).
 ```
 
 Sketches support multiple disconnected profiles, concave outlines, multiple holes,
@@ -67,8 +67,12 @@ Points and infinite lines are construction geometry and do not create boundaries
 Constructors with arguments take a single named options object. `Plane` and
 `Sketch` allow omitted options for their defaults; zero-argument constructors
 such as `Node`, `Memo`, and `Transform` remain unchanged. Extrusion also takes
-named options: `extrude({ sketch, direction })` or
-`sketch.extrude({ direction })`. Extrusion has no tessellation options.
+named options: `extrude({ sketch, length, axis? })` or
+`sketch.extrude({ length, axis? })`. `axis` is a finite, nonzero world-space vector,
+normalized internally without modifying it, and defaults to the sketch plane
+normal. Displacement is `normalize(axis) * length`; negative
+lengths extrude in the opposite direction. Length must be finite and nonzero,
+and the axis must leave the sketch plane. Extrusion has no tessellation options.
 Utilities such as `functionalize` and `transformMat4` keep positional arguments.
 
 CAD operation functions perform geometric work on math objects such as sketches,
@@ -81,7 +85,7 @@ General utilities live in `src/util/`: `functionalize` works with arbitrary
 methods, while `transformMat4` works with matrices and packed coordinate arrays.
 Private geometry implementation helpers live in `src/internal/` and are not
 exported from the root API. The docs browser groups public entries into Classes,
-Shorthands, Operations, and Util.
+Shorthands, Operations, Defaults, and Util.
 
 Every concrete class also has a lowercase constructor shorthand, exported from the root
 and its class module: `node`, `memo`, `transform`, `transformMat4Node`, `line`,
@@ -94,7 +98,7 @@ ordinary class instances and accept the same options and defaults. The name
 import { circle, sketch } from 'libcompass';
 
 const s = sketch().add(circle({ center: { x: 0, y: 0 }, radius: 5 }));
-const body = s.extrude({ direction: [0, 0, 10] });
+const body = s.extrude({ length: 10 });
 ```
 
 `Point` and `Vertex` have no runtime constructors. Use plain object literals and
@@ -203,7 +207,7 @@ const top = body.surfaces.find((surface): surface is Face =>
 )!;
 const nextSketch = Sketch.fromFace(top); // Empty sketch using the face's plane.
 nextSketch.add(new Circle({ center: { x: 5, y: 3 }, radius: 0.5 }));
-const extension = nextSketch.extrude({ direction: [0, 0, 2] });
+const extension = nextSketch.extrude({ length: 2 });
 const blankOnTop = new Sketch({ plane: top });
 
 const boundary = top.boundaries[0];
@@ -251,6 +255,32 @@ currently represents ruled patches, including cylindrical and oblique extrusion
 walls; arbitrary doubly curved surfaces, sketch booleans, and constraints remain
 outside the current API. Invalid trim intersections or triangulations fail
 explicitly rather than producing partial meshes.
+
+## Default objects
+
+Shared defaults live in `src/defaults/` and are exported from the root:
+
+| Default | Value or local frame | Normal |
+| --- | --- | --- |
+| `X` | Unit vector `[1, 0, 0]` | — |
+| `Y` | Unit vector `[0, 1, 0]` | — |
+| `Z` | Unit vector `[0, 0, 1]` | — |
+| `XY` | Plane at the world origin, local axes +X / +Y | +Z |
+| `ZX` | Plane at the world origin, local axes +Z / +X | +Y |
+| `YZ` | Plane at the world origin, local axes +Y / +Z | +X |
+
+These are ready-to-use values, not factories or axis classes. Treat shared
+planes and vectors as immutable. The vectors have gl-matrix's `ReadonlyVec3` type
+and work as inputs to gl-matrix functions and extrusion axes.
+
+```ts
+import { XY, Z, circle, sketch, extrude } from 'libcompass';
+
+const s = sketch({ plane: XY }).add(circle({ center: { x: 0, y: 0 }, radius: 2 }));
+const body = extrude({ sketch: s, axis: Z, length: 1 }); // Extrude one unit along +Z.
+```
+
+Direct modules are `libcompass/defaults/axes` and `libcompass/defaults/planes`.
 
 ## Scene graph and utilities
 

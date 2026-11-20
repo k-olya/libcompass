@@ -8,9 +8,9 @@ test('sketches retain planar curves and reject open extrusion profiles', () => {
   const curve = planarCurve({ at: t => ({ x: t, y: t * t }) });
   const sketch = new Sketch().add(curve);
   assert.equal(sketch.elements[0], curve);
-  assert.throws(() => sketch.extrude({ direction: [0, 0, 1] }), /closed/);
+  assert.throws(() => sketch.extrude({ length: 1 }), /closed/);
   sketch.add(new Circle({ center: { x: 0, y: 0 }, radius: 2 }));
-  assert.throws(() => sketch.extrude({ direction: [0, 0, 1] }), /closed/);
+  assert.throws(() => sketch.extrude({ length: 1 }), /closed/);
 });
 
 test('circles are normalized planar curves with exact shared loop endpoints', () => {

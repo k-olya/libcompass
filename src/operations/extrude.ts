@@ -25,25 +25,38 @@ import { profileAnchor, profileArea, profileContains, sketchProfiles, type Profi
  * and vertex identities are shared. Only triangulation introduces facets,
  * at the library-wide resolution of 0.001.
  *
- * @param options - Sketch and world-space displacement.
+ * @param options - Sketch, signed length, and optional world-space axis.
  * @param options.sketch - Closed profiles of planar curves and line segments.
- * @param options.direction - Finite displacement with a nonzero normal component;
- * oblique and negative extrusion are supported. The normal component must
- * exceed `1e-10` times its length.
+ * @param options.axis - Finite, nonzero vector, normalized internally without
+ * modifying it; defaults to the sketch plane normal. After normalization, its
+ * normal component must exceed `1e-10` in magnitude; oblique axes are supported.
+ * @param options.length - Finite, nonzero extrusion length. Negative values
+ * extrude opposite to the axis. Displacement is `normalize(axis) * length`.
  * @returns A solid with planar caps and exact planar or ruled side surfaces.
- * @throws {@link RangeError} if direction or profiles are invalid, open,
+ * @throws {@link RangeError} if axis, length, or profiles are invalid, open,
  * branched, degenerate, intersecting, or touching.
  *
  * @example
  * ```ts
  * const s = sketch().add(circle({ center: { x: 0, y: 0 }, radius: 5 }));
- * const body = extrude({ sketch: s, direction: [0, 0, 10] });
+ * const body = extrude({ sketch: s, length: 10 });
  * const positions = body.triangulate(); // Facets are created only here.
  * ```
  */
-export function extrude({ sketch, direction }: { sketch: Sketch; direction: ReadonlyVec3 }): Solid {
-  if (![direction[0], direction[1], direction[2]].every(Number.isFinite)) throw new RangeError('Extrusion direction must be finite');
-  const displacement = Array.from(direction) as [number, number, number];
+export function extrude({ sketch, axis = sketch.plane.normal, length }: {
+  /** Sketch supplying closed profiles and the default axis. */
+  sketch: Sketch;
+  /** World-space direction, normalized internally; defaults to the sketch plane normal. */
+  axis?: ReadonlyVec3;
+  /** Finite, nonzero signed length; negative values reverse the extrusion. */
+  length: number;
+}): Solid {
+  if (!Number.isFinite(length) || length === 0) throw new RangeError('Extrusion length must be finite and nonzero');
+  if (![axis[0], axis[1], axis[2]].every(Number.isFinite)) throw new RangeError('Extrusion axis must be finite');
+  const scale = Math.max(Math.abs(axis[0]), Math.abs(axis[1]), Math.abs(axis[2]));
+  if (scale === 0) throw new RangeError('Extrusion axis must be nonzero');
+  const unitAxis = vec3.normalize([0, 0, 0], [axis[0] / scale, axis[1] / scale, axis[2] / scale]);
+  const displacement = vec3.scale([0, 0, 0], unitAxis, length);
   const depth = vec3.dot(sketch.plane.normal, displacement);
   if (Math.abs(depth) <= vec3.length(displacement) * 1e-10 || !Number.isFinite(depth)) throw new RangeError('Extrusion direction must leave the sketch plane');
   const profiles = sketchProfiles(sketch);

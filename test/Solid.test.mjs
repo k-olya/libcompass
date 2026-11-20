@@ -43,7 +43,7 @@ test('solids are memoized nodes with lazy triangulation and preserved topology',
 });
 
 test('extruded solids can be added directly to scenes and transforms', () => {
-  const solid = new Sketch().add(new Circle({ center: { x: 0, y: 0 }, radius: 5 })).extrude({ direction: [0, 0, 10] });
+  const solid = new Sketch().add(new Circle({ center: { x: 0, y: 0 }, radius: 5 })).extrude({ length: 10 });
   const original = solid.triangulate();
   const scene = new Node().add(solid);
   assert.deepEqual(scene.triangulate(), original);

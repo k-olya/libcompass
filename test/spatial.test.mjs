@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { vec3 } from 'gl-matrix';
 import { Circle, Edge, Face, PlanarCurve, Plane, Sketch, Solid, SpatialCurve, SpatialSurface, Surface, TRIANGULATION_RESOLUTION, spatialCurve, spatialSurface } from 'libcompass';
 
 const close = (actual, expected, tolerance = 1e-11) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected}`);
@@ -68,10 +69,11 @@ test('extrusion samples analysis polylines but retains original topology without
   const s = new Sketch().add(new Circle({ center: { x: 2, y: -3 }, radius: 2.123456789123 }));
   const originalSurfaceMesh = Surface.triangulateAll;
   const direction = [0.3, -0.7, 4];
+  const axis = vec3.normalize([0, 0, 0], direction), length = Math.hypot(...direction);
   let body;
   try {
     Surface.triangulateAll = () => { throw new Error('Meshed during extrusion'); };
-    body = s.extrude({ direction });
+    body = s.extrude({ axis, length });
   } finally {
     Surface.triangulateAll = originalSurfaceMesh;
   }
@@ -83,7 +85,7 @@ test('extrusion samples analysis polylines but retains original topology without
   const point = wall.at(0.123456789, 0.43).position;
   const lower = wall.start.at(0.123456789).position;
   point.forEach((value, i) => close(value, lower[i] + direction[i] * 0.43));
-  direction[2] = 99; s.elements.length = 0;
+  axis[2] = 99; s.elements.length = 0;
   close(wall.at(0.123456789, 0.43).position[2], 4 * 0.43);
   const boundaries = [...body.boundaries], vertices = [...body.vertices];
   assertWatertight(body.triangulate());
@@ -140,7 +142,7 @@ test('curved extrusion winding remains outward on tilted planes and negative dis
     const body = new Sketch({ plane }).add(
       new Circle({ center: { x: 0, y: 0 }, radius: 2 }),
       new Circle({ center: { x: 0, y: 0 }, radius: 1 }),
-    ).extrude({ direction });
+    ).extrude({ axis: vec3.normalize([0, 0, 0], direction), length: Math.hypot(...direction) });
     const positions = body.triangulate();
     assertWatertight(positions);
     let volume = 0;
@@ -169,18 +171,18 @@ test('faces accept mixed straight and curved trims without replacing analytic bo
 test('circle profiles use approximate polyline validation', () => {
   const circle = (x, radius) => new Circle({ center: { x, y: 0 }, radius });
   for (const x of [1.9, 0]) {
-    assert.throws(() => new Sketch().add(circle(0, 1), circle(x, 1)).extrude({ direction: [0, 0, 1] }), /intersect or touch/);
+    assert.throws(() => new Sketch().add(circle(0, 1), circle(x, 1)).extrude({ length: 1 }), /intersect or touch/);
   }
-  const separated = new Sketch().add(circle(0, 1), circle(2.00001, 1)).extrude({ direction: [0, 0, 1] });
+  const separated = new Sketch().add(circle(0, 1), circle(2.00001, 1)).extrude({ length: 1 });
   assert.equal(separated.surfaces.length, 6);
-  const thinRing = new Sketch().add(circle(0, 1), circle(0, 0.99999)).extrude({ direction: [0, 0, 1] });
+  const thinRing = new Sketch().add(circle(0, 1), circle(0, 0.99999)).extrude({ length: 1 });
   assert.equal(thinRing.surfaces.length, 4);
   assertWatertight(thinRing.triangulate());
   // Features larger than sampling resolution survive without circle-specific refinement.
   const angle = 0.03;
   const eccentric = new Sketch().add(circle(0, 1), new Circle({
     center: { x: 0.49 * Math.cos(angle), y: 0.49 * Math.sin(angle) }, radius: 0.5,
-  })).extrude({ direction: [0, 0, 1] });
+  })).extrude({ length: 1 });
   assertWatertight(eccentric.triangulate());
 });
 

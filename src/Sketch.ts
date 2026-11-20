@@ -23,7 +23,7 @@ export type SketchElement = Point | Line | LineSegment | PlanarCurve;
  * @example
  * ```ts
  * const sketch = new Sketch().add(new Circle({ center: { x: 0, y: 0 }, radius: 5 }));
- * const solid = sketch.extrude({ direction: [0, 0, 10] });
+ * const solid = sketch.extrude({ length: 10 });
  * ```
  */
 export class Sketch {
@@ -69,16 +69,22 @@ export class Sketch {
   /**
    * Extrude all filled regions, preserving holes and disconnected components.
    *
-   * @param options - World-space displacement; curves remain analytic.
-   * @param options.direction - Finite world-space displacement with a nonzero component
-   * along the plane normal; its magnitude is not normalized.
+   * @param options - Signed length and optional world-space axis; curves remain analytic.
+   * @param options.axis - Finite, nonzero direction, normalized internally without
+   * modifying it; defaults to this sketch's plane normal and must leave the plane.
+   * @param options.length - Finite, nonzero length; negative values extrude
+   * opposite to the axis. Displacement is `normalize(axis) * length`.
    * @returns An analytic solid snapshot with shared boundaries and surfaces.
-   * @throws {@link RangeError} if the direction or profiles are invalid.
-   * @throws {@link TypeError} if a noncircular planar curve is present.
+   * @throws {@link RangeError} if the axis, length, or profiles are invalid.
    * @see {@link extrude}
    */
-  extrude({ direction }: { direction: ReadonlyVec3 }): Solid {
-    return extrude({ sketch: this, direction });
+  extrude({ axis, length }: {
+    /** World-space direction, normalized internally; defaults to this sketch's plane normal. */
+    axis?: ReadonlyVec3;
+    /** Finite, nonzero signed length; negative values reverse the extrusion. */
+    length: number;
+  }): Solid {
+    return extrude({ sketch: this, axis, length });
   }
 }
 

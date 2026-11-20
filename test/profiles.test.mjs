@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { vec3 } from 'gl-matrix';
 import { Circle, LineSegment, PlanarCurve, Plane, Sketch, SpatialCurve, SpatialSurface } from 'libcompass';
 
 const close = (actual, expected, tolerance = 1e-8) => assert.ok(Math.abs(actual - expected) < tolerance, `${actual} != ${expected}`);
@@ -38,7 +39,7 @@ test('planar loops analyze sampled polylines and retain original curves during e
     assert.ok(curve.contains({ point: { x: 9.99, y: 0 } }));
     assert.ok(!curve.contains({ point: { x: 10, y: 0 } }));
     assert.ok(!curve.contains({ point: { x: 10.001, y: 0 } }));
-    const body = new Sketch().add(curve).extrude({ direction: [0, 0, 2] });
+    const body = new Sketch().add(curve).extrude({ length: 2 });
     assert.ok(samples > 0);
     assert.equal(body.surfaces.length, 3);
     assert.ok(body.boundaries.every(boundary => boundary instanceof SpatialCurve && boundary.planarCurve === curve));
@@ -52,7 +53,7 @@ test('general loops classify holes, islands, and disconnected regions independen
   const curves = [ellipse(1, 0.5), ellipse(3, 2, 0, true), ellipse(0.25, 0.2, 0, true), ellipse(1, 1.5, 8)];
   const s = new Sketch().add(...curves);
   const area = Math.PI * (6 - 0.5 + 0.05 + 1.5);
-  for (const direction of [[0.3, -0.4, 2], [0.3, -0.4, -2]]) checkMesh(s.extrude({ direction }), area * 2);
+  for (const direction of [[0.3, -0.4, 2], [0.3, -0.4, -2]]) checkMesh(s.extrude({ axis: vec3.normalize([0, 0, 0], direction), length: Math.hypot(...direction) }), area * 2);
 });
 
 test('smooth open curve joins work in arbitrary insertion order and direction', () => {
@@ -61,7 +62,7 @@ test('smooth open curve joins work in arbitrary insertion order and direction', 
     if (i % 2) t = 1 - t;
     return t === 0 ? point : t === 1 ? points[(i + 1) % 4] : { x: 3 * Math.cos((i + t) * Math.PI / 2), y: 2 * Math.sin((i + t) * Math.PI / 2) };
   } }));
-  const body = new Sketch().add(arcs[2], arcs[0], arcs[3], arcs[1]).extrude({ direction: [0, 0, 2] });
+  const body = new Sketch().add(arcs[2], arcs[0], arcs[3], arcs[1]).extrude({ length: 2 });
   assert.equal(body.vertices.length, 8);
   checkMesh(body, 12 * Math.PI);
 });
@@ -73,7 +74,7 @@ test('analysis and tessellation delegate sampling without curve-type predicates'
   // The sampled diamond, rather than the exact circle, controls classification.
   close(curve.area(), 2);
   assert.ok(!curve.contains({ point: { x: 0.8, y: 0.3 } }));
-  const body = new Sketch().add(curve).extrude({ direction: [0, 0, 2] });
+  const body = new Sketch().add(curve).extrude({ length: 2 });
   checkMesh(body, 4);
   assert.equal(body.triangulate().length / 9, 12);
   assert.ok(requests >= 3);
@@ -82,7 +83,7 @@ test('analysis and tessellation delegate sampling without curve-type predicates'
   assert.equal(rim.planarCurve, curve);
   const translated = ellipse(3, 2, 1e6);
   close(translated.area(), 6 * Math.PI, 0.01);
-  assert.equal(new Sketch().add(translated).extrude({ direction: [0, 0, 1] }).vertices.length, 2);
+  assert.equal(new Sketch().add(translated).extrude({ length: 1 }).vertices.length, 2);
 });
 
 test('mixed open curves and segments share endpoint and boundary identities', () => {
@@ -92,7 +93,7 @@ test('mixed open curves and segments share endpoint and boundary identities', ()
   for (const elements of [[arc, segment], [segment, arc]]) {
     const s = new Sketch({ plane: new Plane({ a: [0, 0, 0], b: [1, 0, 0], c: [0, 0, 1] }) }).add(...elements);
     for (const direction of [[0.2, 2, 0.3], [0.2, -2, 0.3]]) {
-      const body = s.extrude({ direction });
+      const body = s.extrude({ axis: vec3.normalize([0, 0, 0], direction), length: Math.hypot(...direction) });
       assert.equal(body.vertices.length, 4);
       assert.equal(body.surfaces.filter(surface => surface instanceof SpatialSurface).length, 1);
       for (const boundary of body.boundaries) {
@@ -106,16 +107,16 @@ test('mixed open curves and segments share endpoint and boundary identities', ()
 
 test('polyline analysis rejects crossings, self-intersections, and open profiles', () => {
   for (const offset of [0, 1, 2]) {
-    assert.throws(() => new Sketch().add(ellipse(1, 2), ellipse(1, 2, offset)).extrude({ direction: [0, 0, 1] }), RangeError);
+    assert.throws(() => new Sketch().add(ellipse(1, 2), ellipse(1, 2, offset)).extrude({ length: 1 }), RangeError);
   }
-  checkMesh(new Sketch().add(ellipse(1, 2), ellipse(1, 2, 2.001)).extrude({ direction: [0, 0, 1] }), 4 * Math.PI);
+  checkMesh(new Sketch().add(ellipse(1, 2), ellipse(1, 2, 2.001)).extrude({ length: 1 }), 4 * Math.PI);
   const eight = new PlanarCurve({ at: t => { const a = (t === 1 ? 0 : t) * 2 * Math.PI; return { x: Math.sin(a), y: Math.sin(2 * a) }; } });
-  assert.throws(() => new Sketch().add(eight).extrude({ direction: [0, 0, 1] }), RangeError);
+  assert.throws(() => new Sketch().add(eight).extrude({ length: 1 }), RangeError);
   const open = new PlanarCurve({ at: t => ({ x: t, y: t * t }) });
-  assert.throws(() => new Sketch().add(open).extrude({ direction: [0, 0, 1] }), /closed/);
+  assert.throws(() => new Sketch().add(open).extrude({ length: 1 }), /closed/);
   const a = { x: 0, y: 0 }, b = { x: 1, y: 0 };
   const crossing = new PlanarCurve({ at: t => t === 0 ? a : t === 1 ? b : { x: t, y: Math.sin(t * 2 * Math.PI) } });
-  assert.throws(() => new Sketch().add(crossing, new LineSegment({ start: b, end: a })).extrude({ direction: [0, 0, 1] }), RangeError);
+  assert.throws(() => new Sketch().add(crossing, new LineSegment({ start: b, end: a })).extrude({ length: 1 }), RangeError);
   const circle = new Circle({ center: { x: 0, y: 0 }, radius: 2 });
   close(circle.area(), 4 * Math.PI, 0.01);
   assert.ok(!circle.contains({ point: { x: 2, y: 0 } }));
@@ -145,7 +146,7 @@ test('oscillating curves can override only sample through analysis, lifting, and
   points.forEach((point, i) => assert.deepEqual(vertices[i].position, plane.toWorld(point).position));
   assert.equal(vertices[0], lifted.start);
   assert.equal(vertices.at(-1), lifted.end);
-  const body = new Sketch({ plane }).add(curve).extrude({ direction: [0, -1, 0] });
+  const body = new Sketch({ plane }).add(curve).extrude({ length: 1 });
   checkMesh(body, curve.area());
   assert.equal(body.triangulate().length / 9, 4 * 256 - 4);
   assert.ok(calls >= 5);

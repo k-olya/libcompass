@@ -126,13 +126,44 @@ test('general smooth loops retain their equations and custom sampling through dr
     return { x: 3 * Math.cos(angleRAD), y: 2 * Math.sin(angleRAD) };
   } });
   let calls = 0;
-  curve.sample = () => { calls++; return Array.from({ length: 257 }, (_, i) => curve.at(i / 256)); };
+  const parameters = Array.from({ length: 257 }, (_, i) => i / 256 + 0.3 * Math.sin(i / 256 * 2 * Math.PI) / (2 * Math.PI));
+  curve.sample = () => { calls++; return parameters.map(t => curve.at(t)); };
   curve.sampleParameters = () => { throw new Error('Must respect sample() overrides'); };
   const body = new Sketch().add(curve).extrude({ length: 1, angle: radtodeg(0.1) });
   const wall = body.surfaces.find(surface => surface instanceof SpatialSurface);
   assert.ok(calls > 0); wallAngle(wall, [0, 0, 1], 0.1); mesh(body);
+  const lower = wall.start.sampleWithParameters().map(sample => sample.t);
+  assert.deepEqual(lower, wall.end.sampleWithParameters().map(sample => sample.t));
+  for (const t of parameters) assert.ok(lower.includes(t), `Source sample ${t} was discarded`);
   const p = curve.at(0.123), tangent = curve.tangent(0.123), top = wall.at(0.123, 1).position;
   close(top[0], p.x + Math.tan(0.1) * tangent[1]); close(top[1], p.y - Math.tan(0.1) * tangent[0]);
+});
+
+test('small drafts do not increase plate triangulation when its rims already meet resolution', () => {
+  const s = rectangle(100, 64).add(
+    new Circle({ center: { x: 28, y: 32 }, radius: 10 }),
+    new Circle({ center: { x: 72, y: 32 }, radius: 10 }),
+  );
+  const baseline = s.extrude({ length: 12 }).triangulate().length;
+  assert.equal(baseline / 9, 2068);
+  for (const angleDEG of [-3, -0.000001, 0.000001, 3]) {
+    const body = s.extrude({ length: 12, angle: angleDEG });
+    assert.equal(mesh(body).length, baseline);
+  }
+});
+
+test('expanding draft adds subdivisions when the actual offset exceeds resolution', () => {
+  const curve = circle(10), body = new Sketch().add(curve).extrude({ length: 10, angle: 45 });
+  const wall = body.surfaces.find(surface => surface instanceof SpatialSurface);
+  const lower = wall.start.sampleWithParameters(), upper = wall.end.sampleWithParameters();
+  assert.ok(lower.length > curve.sample().length);
+  assert.deepEqual(lower.map(sample => sample.t), upper.map(sample => sample.t));
+  for (let i = 0; i + 1 < upper.length; i++) {
+    const middle = wall.end.at((upper[i].t + upper[i + 1].t) / 2).position;
+    const chord = vec3.lerp([0, 0, 0], upper[i].point.position, upper[i + 1].point.position, 0.5);
+    assert.ok(vec3.distance(middle, chord) <= 0.001);
+  }
+  mesh(body);
 });
 
 test('apex patches also support open rims and collect the apex in solid topology', () => {

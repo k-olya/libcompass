@@ -102,9 +102,12 @@ Draft uses the generic `PlanarCurve.tangent(t)` unit tangent. By default it uses
 finite differences of `at(t)`; pass an optional `tangent: t => [dx, dy]` evaluator
 or override the method for exact derivatives. `Circle` provides its exact tangent.
 The extrusion operation has no curve-type special cases. Source `sample()`
-overrides are respected; default sampling can accept `{ resolution }` when draft
-needs finer polylines. Generated curve equations remain separate from those
-temporary analysis and tessellation samples.
+overrides are respected. Draft keeps their sample parameters and uses the
+curve's tangent evaluator at those parameters. It bisects intervals only when
+the source or offset rim exceeds the requested midpoint deviation, sharing the
+resulting parameters between both rims. A nonzero draft does not automatically
+tighten the tolerance. Generated equations remain separate from those temporary
+analysis and tessellation samples.
 
 `extrudeAlongCurve({ sketch, curve })` and `sketch.extrudeAlongCurve({ curve })`
 sweep all filled regions along a smooth, regular `SpatialCurve`. Local (0, 0)
@@ -137,7 +140,7 @@ a temporary mesh and an AABB hierarchy for triangle intersection checks.
 
 `PlanarCurve.sampleWithParameters()` and `SpatialCurve.sampleWithParameters()`
 return `{ t, point }` records by calling `.sample()`, including overrides.
-Overrides used by sweeps must build their samples with `this.at(t)` so parameter
+Overrides used by drafts or sweeps must build their samples with `this.at(t)` so parameter
 metadata survives; unavailable or unordered parameters throw instead of guessing
 from vertex indices. Ordinary `.sample()` still returns points or vertices.
 

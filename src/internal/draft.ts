@@ -12,10 +12,32 @@ const unit = (x: number, y: number): Point => {
   return { x: x / length, y: y / length };
 };
 
-/** Curve equations and matching samples; source sampling overrides remain authoritative. */
+/** Refine offset samples only where either rim exceeds the requested deviation. */
 class DraftCurve extends PlanarCurve {
-  constructor(at: (t: number) => Point, private readonly points: Point[]) { super({ at }); }
-  override sample(): Point[] { return [...this.points]; }
+  private readonly samples = new Map<number, Point[]>();
+  constructor(at: (t: number) => Point, private readonly source: PlanarCurve) { super({ at }); }
+  override sample({ resolution = TRIANGULATION_RESOLUTION }: { resolution?: number } = {}): Point[] {
+    if (!Number.isFinite(resolution) || resolution <= 0) throw new RangeError('Triangulation resolution must be positive and finite');
+    const cached = this.samples.get(resolution);
+    if (cached) return [...cached];
+    const source = this.source.sampleWithParameters({ resolution });
+    const result = [this.at(0)];
+    const refine = (a: number, b: number, lowerA: Point, lowerB: Point, upperA: Point, upperB: Point, depth: number): void => {
+      const t = (a + b) / 2, lower = this.source.at(t), upper = this.at(t);
+      const error = (p: Point, start: Point, end: Point) => Math.hypot(p.x - (start.x + end.x) / 2, p.y - (start.y + end.y) / 2);
+      if (Math.max(error(lower, lowerA, lowerB), error(upper, upperA, upperB)) > resolution) {
+        if (depth >= 20) throw new RangeError('Draft curve cannot be sampled at the triangulation resolution');
+        refine(a, t, lowerA, lower, upperA, upper, depth + 1);
+        refine(t, b, lower, lowerB, upper, upperB, depth + 1);
+      } else result.push(upperB);
+    };
+    for (let i = 0; i + 1 < source.length; i++) {
+      const a = source[i], b = source[i + 1];
+      refine(a.t, b.t, a.point, b.point, result[result.length - 1], this.at(b.t), 0);
+    }
+    this.samples.set(resolution, result);
+    return [...result];
+  }
 }
 
 export function draftProfile(profile: Profile, hole: boolean, plane: Plane, axis: ReadonlyVec3, angleRAD: number) {
@@ -61,27 +83,18 @@ export function draftProfile(profile: Profile, hole: boolean, plane: Plane, axis
     return { x: (ca * b.y - a.y * cb) / determinant, y: (a.x * cb - ca * b.x) / determinant };
   });
   const atVelocity = (entry: ProfileBoundary, t: number): Point => velocity(normal(entry, t));
-  const sample = (index: number, resolution = TRIANGULATION_RESOLUTION): { points: Point[]; velocities: Point[] } => {
+  const sample = (index: number): { points: Point[]; velocities: Point[] } => {
     const entry = entries[index];
     if (entry.straight) return { points: [entry.curve.start, entry.curve.end], velocities: entry.reversed
       ? [velocities[(index + 1) % entries.length], velocities[index]]
       : [velocities[index], velocities[(index + 1) % entries.length]] };
     const { curve } = entry;
-    const samples = curve.sample({ resolution });
-    const shifts = samples.map((point, i) => {
-      if (!curve.isLoop() && (i === 0 || i === samples.length - 1)) return atVelocity(entry, i === 0 ? 0 : 1);
-      const a = samples[i === 0 ? samples.length - 2 : i - 1];
-      const b = samples[i === samples.length - 1 ? 1 : i + 1];
-      const la = Math.hypot(point.x - a.x, point.y - a.y), lb = Math.hypot(b.x - point.x, b.y - point.y);
-      const tangent = unit((point.x - a.x) * lb / la + (b.x - point.x) * la / lb,
-        (point.y - a.y) * lb / la + (b.y - point.y) * la / lb);
-      const sign = entry.reversed ? -1 : 1;
-      return velocity({ x: tangent.y * sign, y: -tangent.x * sign });
-    });
+    const samples = curve.sampleWithParameters();
+    const shifts = samples.map(({ t }) => atVelocity(entry, t));
     const next = (index + 1) % entries.length;
     shifts[0] = velocities[entry.reversed ? next : index];
     shifts[shifts.length - 1] = velocities[entry.reversed ? index : next];
-    return { points: samples, velocities: shifts };
+    return { points: samples.map(sample => sample.point), velocities: shifts };
   };
   const samples = entries.flatMap((entry, i) => {
     const data = sample(i);
@@ -117,23 +130,16 @@ export function draftProfile(profile: Profile, hole: boolean, plane: Plane, axis
     const entry = entries[index];
     if (entry.straight) throw new TypeError('Straight draft boundaries use edges');
     const { curve } = entry;
-    const coarse = curve.sample();
-    let curvature = 0;
-    for (let i = 1; i + 1 < coarse.length; i++) {
-      const a = coarse[i - 1], b = coarse[i], c = coarse[i + 1];
-      const ab = Math.hypot(b.x - a.x, b.y - a.y), bc = Math.hypot(c.x - b.x, c.y - b.y), ac = Math.hypot(c.x - a.x, c.y - a.y);
-      curvature = Math.max(curvature, 2 * Math.abs((b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)) / (ab * bc * ac));
-    }
-    const speed = sample(index).velocities.reduce((speed, v) => Math.max(speed, Math.hypot(v.x, v.y)), 0);
-    // Refine the source for both chord error and the offset's tangent estimate.
-    const data = sample(index, TRIANGULATION_RESOLUTION / (2 * (1 + distance * speed * curvature)));
-    const shifted = data.points.map((point, i) => ({ x: point.x + distance * data.velocities[i].x, y: point.y + distance * data.velocities[i].y }));
+    const next = (index + 1) % entries.length;
     const at = (t: number): Point => {
-      const p = curve.at(t), v = atVelocity(entry, t);
+      const p = curve.at(t), v = t === 0 ? velocities[entry.reversed ? next : index]
+        : t === 1 ? velocities[entry.reversed ? index : next] : atVelocity(entry, t);
       return { x: p.x + distance * v.x, y: p.y + distance * v.y };
     };
-    const top = new DraftCurve(t => t === 0 ? shifted[0] : t === 1 ? shifted[shifted.length - 1] : at(t), shifted);
-    return [new DraftCurve(t => curve.at(t), data.points), top];
+    const top = new DraftCurve(at, curve);
+    const bottom = new PlanarCurve({ at: t => curve.at(t) });
+    bottom.sample = options => top.sampleWithParameters(options).map(({ t }) => bottom.at(t));
+    return [bottom, top];
   };
   return { entries, points, velocities, collapse, curves, polygon };
 }

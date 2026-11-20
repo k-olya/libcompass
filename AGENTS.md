@@ -45,7 +45,10 @@
 - Keep drafting independent of curve types. Use `PlanarCurve.tangent(t)`;
   its default uses finite differences and exact evaluators or overrides are
   allowed. Curve sampling overrides remain authoritative for draft analysis
-  and tessellation; never replace a curve's equations with its polyline.
+  and tessellation; never replace a curve's equations with its polyline. Preserve
+  source sample parameters and evaluate tangents there. Refine paired draft rims
+  only when the actual source or offset midpoint deviation exceeds resolution;
+  do not tighten the tolerance just because the draft angle is nonzero.
 - Sweep with `extrudeAlongCurve({ sketch, curve })` only along smooth regular
   paths. Local (0, 0) follows the path; align the sketch normal to its tangent
   and transport the in-plane axes with minimal twist. Correct residual rotation
@@ -85,7 +88,7 @@
   polyline with independent `at(t)` probes. Parameter selection belongs inside
   the curve's sampling implementation. `sampleWithParameters()` is an allowed
   wrapper: it must call `.sample()` and retain its points and normalized t
-  metadata. Sampling overrides used by sweeps return `this.at(t)` points;
+  metadata. Sampling overrides used by drafts or sweeps return `this.at(t)` points;
   missing or unordered metadata must throw, never infer t from sample indices.
 
 # Earlier node prototypes

@@ -16,6 +16,11 @@ import type { Tessellation } from './internal/Tessellation.js';
  * Only Face, rather than SpatialSurface, can supply a sketch plane.
  */
 export class Face extends Surface {
+  /** Ordered outer boundary of this planar face. */
+  get outer(): readonly SpatialBoundary[] { return this.boundaryLoops[0]; }
+  /** Ordered boundaries of holes in this planar face. */
+  get holes(): readonly (readonly SpatialBoundary[])[] { return this.boundaryLoops.slice(1); }
+
   /** Oriented local frame; triangle winding follows its normal. */
   readonly plane: Plane;
 
@@ -33,7 +38,7 @@ export class Face extends Surface {
     holes?: readonly (readonly SpatialBoundary[])[];
     plane?: Plane;
   }) {
-    super({ outer, holes });
+    super({ boundaryLoops: [outer, ...holes] });
     const anchors = (loop: readonly SpatialBoundary[]) => orientLoop(loop).flatMap(({ boundary, reversed }) => {
       const points = boundary.sample();
       return (reversed ? [...points].reverse() : points).slice(0, -1);

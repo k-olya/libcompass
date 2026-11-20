@@ -5,6 +5,8 @@ import type { LineSegment } from './LineSegment.js';
 import { Plane } from './Plane.js';
 import type { PlanarCurve } from './PlanarCurve.js';
 import type { Point } from './Point.js';
+import type { SpatialCurve } from './SpatialCurve.js';
+import { extrudeAlongCurve } from './operations/extrudeAlongCurve.js';
 import { extrude } from './operations/extrude.js';
 import { Solid } from './Solid.js';
 
@@ -65,6 +67,17 @@ export class Sketch {
     if (!(face instanceof Face)) throw new TypeError('Only a planar Face can supply a sketch plane');
     return new Sketch({ plane: face.plane });
   }
+
+  /**
+   * Sweep filled regions along a smooth spatial curve with transported orientation.
+   * @param options - Spatial path; local (0, 0) follows it and its tangent is the sketch normal.
+   * @throws {@link RangeError} for unsupported paths or detected folds and intersections.
+   * @see {@link extrudeAlongCurve}
+   */
+  extrudeAlongCurve({ curve }: {
+    /** Smooth regular spatial path, open or smoothly closed. */
+    curve: SpatialCurve;
+  }): Solid { return extrudeAlongCurve({ sketch: this, curve }); }
 
   /**
    * Extrude all filled regions, preserving holes and disconnected components.

@@ -136,7 +136,7 @@ test('a concave boundary beginning at a reflex corner has a consistent face plan
   const sketch = new Sketch().add(...points.map((point, i) => new LineSegment({ start: point, end: points[(i + 1) % points.length] })));
   const solid = sketch.extrude({ length: 3 });
   checkSolid(solid, 21);
-  const top = solid.surfaces.find((face) => face.outer.length === 6 && face.plane.normal[2] > 0);
+  const top = solid.surfaces.find((face) => face instanceof Face && face.outer.length === 6 && face.plane.normal[2] > 0);
   assert.ok(top);
   const next = Sketch.fromFace(top);
   assert.equal(next.plane, top.plane);
@@ -156,9 +156,9 @@ test('multiple profiles, multiple holes, and nested islands use even-odd fill', 
   assert.equal(solid.boundaries.length, 60);
   assert.equal(solid.surfaces.length, 26);
   assert.equal(solid.triangulate().length / 9, 76);
-  assert.equal(solid.surfaces.filter((face) => face.holes.length === 2).length, 2);
+  assert.equal(solid.surfaces.filter((face) => face instanceof Face && face.holes.length === 2).length, 2);
 
-  const top = solid.surfaces.find((face) => face.holes.length === 2 && face.plane.normal[2] > 0);
+  const top = solid.surfaces.find((face) => face instanceof Face && face.holes.length === 2 && face.plane.normal[2] > 0);
   const nextSketch = Sketch.fromFace(top);
   assert.equal(nextSketch.plane, top.plane);
   assert.deepEqual(nextSketch.elements, []);

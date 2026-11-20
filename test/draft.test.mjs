@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { vec3 } from 'gl-matrix';
-import { Circle, Edge, LineSegment, PlanarCurve, Sketch, Solid, SpatialSurface, XY, ZX, YZ, extrude, planarCurve, radtodeg } from 'libcompass';
+import { Circle, Edge, LineSegment, PlanarCurve, Sketch, Solid, SpatialSurface, RuledSurface, XY, ZX, YZ, extrude, planarCurve, radtodeg } from 'libcompass';
 
 const close = (actual, expected, tolerance = 1e-7) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected}`);
 const circle = (radius, x = 0) => new Circle({ center: { x, y: 0 }, radius });
@@ -137,7 +137,7 @@ test('general smooth loops retain their equations and custom sampling through dr
 
 test('apex patches also support open rims and collect the apex in solid topology', () => {
   const start = new Edge({ start: { position: [0, 0, 0] }, end: { position: [1, 0, 0] } });
-  const apex = { position: [0, 0, 1] }, wall = new SpatialSurface({ start, end: apex });
+  const apex = { position: [0, 0, 1] }, wall = new RuledSurface({ start, end: apex });
   assert.equal(wall.boundaries.length, 3); assert.equal(wall.triangulate().length, 9);
   assert.equal(new Solid({ surfaces: [wall] }).vertices.length, 3);
 });

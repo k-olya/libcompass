@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { vec3 } from 'gl-matrix';
-import { Circle, Edge, Face, PlanarCurve, Plane, Sketch, Solid, SpatialCurve, SpatialSurface, Surface, TRIANGULATION_RESOLUTION, spatialCurve, spatialSurface } from 'libcompass';
+import { Circle, Edge, Face, PlanarCurve, Plane, Sketch, Solid, SpatialCurve, SpatialSurface, RuledSurface, Surface, TRIANGULATION_RESOLUTION, spatialCurve, ruledSurface } from 'libcompass';
 
 const close = (actual, expected, tolerance = 1e-11) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected}`);
 const rim = (radius, z = 0) => SpatialCurve.fromPlanarCurve({ curve: new Circle({ center: { x: 0, y: 0 }, radius }), plane: new Plane({ a: [0, 0, z], b: [1, 0, z], c: [0, 1, z] }) });
@@ -97,7 +97,7 @@ test('extrusion samples analysis polylines but retains original topology without
 test('ruled surfaces synchronize differently sampled rims with their planar caps', () => {
   const start = rim(1), end = rim(4, 3);
   assert.notEqual(start.sample().length, end.sample().length);
-  const wall = spatialSurface({ start, end });
+  const wall = ruledSurface({ start, end });
   const bottom = new Face({ outer: [start], plane: new Plane({ a: [0, 0, 0], b: [1, 0, 0], c: [0, -1, 0] }) });
   const top = new Face({ outer: [end] });
   const body = new Solid({ surfaces: [bottom, top, wall] });
@@ -120,7 +120,7 @@ test('general parametric ellipses lift into a watertight solid without circle me
   const body = new Solid({ surfaces: [
     new Face({ outer: [start], plane: new Plane({ a: [0, 0, 0], b: [1, 0, 0], c: [0, -1, 0] }) }),
     new Face({ outer: [end] }),
-    new SpatialSurface({ start, end }),
+    new RuledSurface({ start, end }),
   ] });
   assert.ok(start.planarCurve instanceof PlanarCurve);
   assert.equal('circle' in start, false);

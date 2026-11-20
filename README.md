@@ -61,7 +61,8 @@ Points and infinite lines are construction geometry and do not create boundaries
 | `new Face({ outer, holes, plane })` | A planar surface with closed loops of edges and spatial curves; holes and an oriented plane are optional. |
 | `new Solid({ surfaces })` | A memoized scene node retaining shared analytic topology. |
 | `new SpatialCurve({ at, start, end })` | A world-space parametric curve on [0, 1], with optional shared endpoint objects. |
-| `new SpatialSurface({ start, end, sides, reversed })` | An exact ruled patch between corresponding boundaries, or from a boundary to an apex vertex. |
+| `new SpatialSurface({ at, boundaryLoops, sides, periodicU, periodicV, reversed })` | A general parametric surface on [0, 1]², with optional periodic directions. |
+| `new RuledSurface({ start, end, sides, reversed })` | An exact ruled patch between corresponding boundaries, or from a boundary to an apex vertex. |
 | `new TransformMat4({ matrix })` | A memoized scene node applying a gl-matrix transformation. |
 
 Constructors with arguments take a single named options object. `Plane` and
@@ -105,6 +106,41 @@ overrides are respected; default sampling can accept `{ resolution }` when draft
 needs finer polylines. Generated curve equations remain separate from those
 temporary analysis and tessellation samples.
 
+`extrudeAlongCurve({ sketch, curve })` and `sketch.extrudeAlongCurve({ curve })`
+sweep all filled regions along a smooth, regular `SpatialCurve`. Local (0, 0)
+follows the path, independent of the sketch plane's original position. The
+plane's orientation is minimally rotated onto the starting tangent, then
+transported with minimal twist. Spatial tangents use finite differences by
+default, with an optional exact evaluator or method override.
+
+```ts
+const s = sketch().add(circle({ center: { x: 0, y: 0 }, radius: 0.3 }));
+const curve = SpatialCurve.fromPlanarCurve({
+  curve: circle({ center: { x: 0, y: 0 }, radius: 2 }),
+});
+const torus = extrudeAlongCurve({ sketch: s, curve });
+// One doubly periodic surface, no caps, seam edges, or intermediate rings.
+```
+
+Open sweeps have planar start/end caps. Smooth closed paths distribute residual
+frame rotation by sampled arc length to join without a seam. The solid retains
+one side surface per source profile boundary and shares longitudinal boundaries
+at profile corners; sampling stations never become solid edges or faces.
+Surface tessellation refines both parameters against midpoint deviation.
+
+Sweeps reject detected corners, cusps, stationary intervals, local folds,
+nonmanifold meshes, and self-intersections, rather than returning partial solids.
+These are numerical checks at the library resolution, not a proof for arbitrary
+user-provided equations. Features or oscillations hidden between probes require
+an appropriate sampling override; unresolved sampling throws. Validation uses
+a temporary mesh and an AABB hierarchy for triangle intersection checks.
+
+`PlanarCurve.sampleWithParameters()` and `SpatialCurve.sampleWithParameters()`
+return `{ t, point }` records by calling `.sample()`, including overrides.
+Overrides used by sweeps must build their samples with `this.at(t)` so parameter
+metadata survives; unavailable or unordered parameters throw instead of guessing
+from vertex indices. Ordinary `.sample()` still returns points or vertices.
+
 CAD operation functions perform geometric work on math objects such as sketches,
 solids, and curves. They live in `src/operations/`; for example, `extrude` is
 available from the root or `libcompass/operations/extrude`. The previous
@@ -129,7 +165,7 @@ they do not wrap or clamp. For example, `degtorad(45)` equals `PI / 4`.
 Every concrete class also has a lowercase constructor shorthand, exported from the root
 and its class module: `node`, `memo`, `transform`, `transformMat4Node`, `line`,
 `lineSegment`, `circle`, `plane`, `sketch`, `edge`, `face`, `solid`,
-`planarCurve`, `spatialCurve`, and `spatialSurface`. They return
+`planarCurve`, `spatialCurve`, `spatialSurface`, and `ruledSurface`. They return
 ordinary class instances and accept the same options and defaults. The name
 `transformMat4Node` avoids a collision with the `transformMat4` utility.
 
@@ -190,7 +226,7 @@ positive area or containment.
 
 Profile area, containment, nesting, and intersection checks use temporary sampled
 polylines and ordinary polygon algorithms. The original curves are retained for
-extrusion into exact `SpatialCurve` boundaries and `SpatialSurface` walls. Sample
+extrusion into exact `SpatialCurve` boundaries and `RuledSurface` walls. Sample
 points never become topological vertices or straight replacements for curves.
 There are no curve-type intersection equations or circle-specific profile rules.
 Analysis is approximate at the sampling resolution, so very narrow gaps, touches,
@@ -235,11 +271,14 @@ const rim = SpatialCurve.fromPlanarCurve({ curve: local, plane: new Plane() });
 const vertices = rim.sample(); // First and last vertices are the same loop endpoint.
 ```
 
-`Surface.outer` and `Surface.holes` are ordered arrays of shared boundaries;
-traversal direction is inferred from their connected endpoints. `boundaries`
-flattens these loops, and `vertices` lists unique endpoint objects. A periodic
-ruled wall uses its two circular rims as its outer and inner trims, without an
-artificial seam. `SpatialSurface.at(u, v)` evaluates the exact ruled patch.
+`Surface.boundaryLoops` stores physical trim loops; `boundaries` flattens them,
+and `vertices` lists their unique endpoint objects. `Face.outer` and `Face.holes`
+retain their planar meaning. A ruled cylinder has two rim loops without an
+artificial seam. A torus can have no physical boundaries at all.
+`SpatialSurface.at(u, v)` evaluates a general parametric surface, while
+`RuledSurface` specializes it to linear interpolation between rims or an apex.
+The old `new SpatialSurface({ start, end })` and `spatialSurface({ start, end })`
+forms are now `new RuledSurface({ start, end })` and `ruledSurface({ start, end })`.
 
 ```ts
 const top = body.surfaces.find((surface): surface is Face =>
@@ -280,7 +319,8 @@ properties describe the solid's own surfaces, excluding children.
 
 Planar curves retain their equations through extrusion. Profile validation and
 even-odd nesting use sampled polylines, without shape checks in profile assembly. Mixed curves and straight edges share endpoint vertices and vertical
-edges. There is no triangulation during solid construction.
+edges. Straight extrusion does not triangulate during solid construction;
+sweep construction additionally checks a temporary validation mesh.
 
 `TRIANGULATION_RESOLUTION` is currently fixed library-wide at `0.001` model units:
 the target midpoint-to-chord deviation. Triangulation samples shared boundaries
@@ -290,10 +330,10 @@ triangle output uses `Float32Array`; analytic coordinate evaluation uses JavaScr
 numbers. Changing mesh density never changes the stored mathematical geometry.
 
 Adaptive midpoint probes can miss oscillations between probes; they do not
-provide a certified global error bound for arbitrary evaluators. `SpatialSurface`
-currently represents ruled patches, including cylindrical, conical, and oblique extrusion
-walls; arbitrary doubly curved surfaces, sketch booleans, and constraints remain
-outside the current API. Invalid trim intersections or triangulations fail
+provide a certified global error bound for arbitrary evaluators. General spatial
+surfaces support curvature in both parameters and periodic seams. Arbitrary
+curved trimming in UV space, sketch booleans, and constraints remain outside
+the current API. Invalid trim intersections or triangulations fail
 explicitly rather than producing partial meshes.
 
 ## Default objects

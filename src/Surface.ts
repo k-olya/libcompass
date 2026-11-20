@@ -5,19 +5,16 @@ import { Tessellation } from './internal/Tessellation.js';
 
 /** Shared topological base for planar faces and curved spatial surfaces. */
 export abstract class Surface {
-  /** Ordered outer trim; boundary objects are shared with neighboring surfaces. */
-  readonly outer: readonly SpatialBoundary[];
-  /** Ordered inner trims. On a periodic wall this contains its opposite rim. */
-  readonly holes: readonly (readonly SpatialBoundary[])[];
+  /** Physical trim loops; a closed periodic surface can have no boundaries. */
+  readonly boundaryLoops: readonly (readonly SpatialBoundary[])[];
 
-  protected constructor({ outer, holes = [] }: { outer: readonly SpatialBoundary[]; holes?: readonly (readonly SpatialBoundary[])[] }) {
-    this.outer = [...outer];
-    this.holes = holes.map(loop => [...loop]);
-    for (const loop of [this.outer, ...this.holes]) orientLoop(loop);
+  protected constructor({ boundaryLoops }: { boundaryLoops: readonly (readonly SpatialBoundary[])[] }) {
+    this.boundaryLoops = boundaryLoops.map(loop => [...loop]);
+    for (const loop of this.boundaryLoops) orientLoop(loop);
   }
 
-  /** Boundary objects in outer-then-holes order, including shared identities. */
-  get boundaries(): readonly SpatialBoundary[] { return [this.outer, ...this.holes].flat(); }
+  /** Shared physical boundary objects; parameter seams are not topology. */
+  get boundaries(): readonly SpatialBoundary[] { return this.boundaryLoops.flat(); }
   /** Unique topological endpoints; tessellation vertices are never added here. */
   get vertices(): readonly Vertex[] { return [...new Set(this.boundaries.flatMap(boundary => [boundary.start, boundary.end]))]; }
 
@@ -31,7 +28,12 @@ export abstract class Surface {
    */
   static triangulateAll(surfaces: readonly Surface[]): Float32Array {
     const context = new Tessellation();
-    surfaces.forEach(surface => surface.prepare(context));
+    for (let pass = 0; ; pass++) {
+      const revision = context.revision;
+      surfaces.forEach(surface => surface.prepare(context));
+      if (context.revision === revision) break;
+      if (pass >= 20) throw new RangeError('Shared surface sampling did not converge');
+    }
     const meshes = surfaces.map(surface => surface.mesh(context));
     const positions = new Float32Array(meshes.reduce((length, mesh) => length + mesh.length, 0));
     let offset = 0;

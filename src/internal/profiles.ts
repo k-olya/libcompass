@@ -61,3 +61,22 @@ export function sketchProfiles(sketch: Sketch): Profile[] {
   validateLoops(profiles.map(profile => profile.points));
   return profiles;
 }
+
+/** Parent contours and nesting depth, independent of insertion order or winding. */
+export function profileNesting(profiles: readonly Profile[]): { parents: number[]; depths: number[] } {
+  const areas = profiles.map(profileArea);
+  const parents = profiles.map((profile, i) => {
+    let parent = -1;
+    profiles.forEach((candidate, j) => {
+      if (i !== j && areas[j] > areas[i] && profileContains(candidate, profileAnchor(profile)) &&
+          (parent === -1 || areas[j] < areas[parent])) parent = j;
+    });
+    return parent;
+  });
+  const depths = parents.map(parent => {
+    let depth = 0;
+    for (let i = parent; i !== -1; i = parents[i]) depth++;
+    return depth;
+  });
+  return { parents, depths };
+}

@@ -6,10 +6,10 @@ import type { Sketch } from '../Sketch.js';
 import { Solid } from '../Solid.js';
 import type { SpatialBoundary } from '../SpatialBoundary.js';
 import { SpatialCurve } from '../SpatialCurve.js';
-import { SpatialSurface } from '../SpatialSurface.js';
+import { RuledSurface } from '../RuledSurface.js';
 import type { Surface } from '../Surface.js';
 import { validateVertex } from '../Vertex.js';
-import { profileAnchor, profileArea, profileContains, sketchProfiles, type Profile } from '../internal/profiles.js';
+import { profileAnchor, profileContains, profileNesting, sketchProfiles, type Profile } from '../internal/profiles.js';
 import { draftProfile } from '../internal/draft.js';
 import { containsInterior, validateLoops } from '../internal/polygon.js';
 import { degtorad } from '../util/angles.js';
@@ -70,20 +70,7 @@ export function extrude({ sketch, axis = sketch.plane.normal, length, angle: ang
   const unitAxis = vec3.normalize([0, 0, 0], [axis[0] / scale, axis[1] / scale, axis[2] / scale]);
   if (Math.abs(vec3.dot(sketch.plane.normal, unitAxis)) <= 1e-10) throw new RangeError('Extrusion direction must leave the sketch plane');
   const profiles = sketchProfiles(sketch);
-  const areas = profiles.map(profileArea);
-  const parents = profiles.map((profile, i) => {
-    let parent = -1;
-    profiles.forEach((candidate, j) => {
-      if (i !== j && areas[j] > areas[i] && profileContains(candidate, profileAnchor(profile)) &&
-          (parent === -1 || areas[j] < areas[parent])) parent = j;
-    });
-    return parent;
-  });
-  const depths = parents.map(parent => {
-    let depth = 0;
-    for (let index = parent; index !== -1; index = parents[index]) depth++;
-    return depth;
-  });
+  const { parents, depths } = profileNesting(profiles);
   const travelAxis = vec3.scale([0, 0, 0], unitAxis, Math.sign(length));
   const drafts = angleDEG === 0 ? [] : profiles.map((profile, i) => draftProfile(profile, depths[i] % 2 !== 0, sketch.plane, travelAxis, angleRAD));
   const distance = drafts.reduce((distance, draft) => Math.min(distance, draft.collapse?.distance ?? Infinity), Math.abs(length));
@@ -108,7 +95,7 @@ export function extrude({ sketch, axis = sketch.plane.normal, length, angle: ang
   });
   const bottomFrame = frame([0, 0, 0]), topFrame = frame(displacement);
   const surfaces: Surface[] = [];
-  const lift = (profile: Profile, hole: boolean): { bottom: SpatialBoundary[]; top: SpatialBoundary[]; sides: Face | SpatialSurface }[] => {
+  const lift = (profile: Profile, hole: boolean): { bottom: SpatialBoundary[]; top: SpatialBoundary[]; sides: Face | RuledSurface }[] => {
     const reverse = (profile.signedArea > 0) === hole;
     const draft = drafts[profiles.indexOf(profile)];
     const entries = draft?.entries ?? (reverse ? [...profile.boundaries].reverse().map(b => ({ ...b, reversed: !b.reversed })) : profile.boundaries);
@@ -131,7 +118,7 @@ export function extrude({ sketch, axis = sketch.plane.normal, length, angle: ang
       const [bottomCurve, topCurve] = draft ? draft.curves(i, distance) : [curve, curve];
       const lower = SpatialCurve.fromPlanarCurve({ curve: bottomCurve, plane: bottomFrame, start: bottomVertices[start], end: bottomVertices[end] });
       const upper = apex ?? SpatialCurve.fromPlanarCurve({ curve: topCurve, plane: topFrame, start: topVertices[start], end: topVertices[end] });
-      return { bottom: [lower], top: 'position' in upper ? [] : [upper], sides: new SpatialSurface({ start: lower, end: upper,
+      return { bottom: [lower], top: 'position' in upper ? [] : [upper], sides: new RuledSurface({ start: lower, end: upper,
         sides: curve.isLoop() ? undefined : [vertical[end], vertical[start]], reversed: (depth < 0) !== reversed }) };
     });
   };

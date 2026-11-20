@@ -1,3 +1,5 @@
+import { rememberSample, sampleParameter, parameterizedSamples } from './internal/curveSamples.js';
+import { vec3, type ReadonlyVec3 } from 'gl-matrix';
 import { Plane } from './Plane.js';
 import { PlanarCurve } from './PlanarCurve.js';
 import type { SpatialBoundary } from './SpatialBoundary.js';
@@ -16,20 +18,23 @@ export class SpatialCurve implements SpatialBoundary {
   readonly start: Vertex;
   readonly end: Vertex;
   private readonly evaluate: (t: number) => Vertex;
+  private readonly evaluateTangent?: (t: number) => ReadonlyVec3;
   private planar?: { curve: PlanarCurve; plane: Plane };
 
   /**
    * Create a parametric curve without tessellating it.
    *
-   * @param options - Exact evaluator and optional shared endpoint objects.
+   * @param options - Exact evaluator, optional tangent evaluator, and shared endpoint objects.
    * @throws {@link RangeError} if endpoint coordinates are nonfinite or disagree with the evaluator.
    */
-  constructor({ at, start, end }: {
+  constructor({ at, tangent, start, end }: {
     at: (t: number) => Vertex;
+    tangent?: (t: number) => ReadonlyVec3;
     start?: Vertex;
     end?: Vertex;
   }) {
     this.evaluate = at;
+    this.evaluateTangent = tangent;
     const a = validateVertex(at(0)), b = validateVertex(at(1));
     this.start = validateVertex(start ?? a);
     this.end = validateVertex(end ?? b);
@@ -83,8 +88,40 @@ export class SpatialCurve implements SpatialBoundary {
    */
   at(t: number): Vertex {
     if (!Number.isFinite(t) || t < 0 || t > 1) throw new RangeError('Curve parameter must be in [0, 1]');
-    return t === 0 ? this.start : t === 1 ? this.end : validateVertex(this.evaluate(t));
+    return rememberSample(this, t === 0 ? this.start : t === 1 ? this.end : validateVertex(this.evaluate(t)), t);
   }
+
+  /**
+   * Unit tangent toward increasing t; defaults to finite differences of at().
+   * @param t - Normalized parameter in [0, 1].
+   * @throws {@link RangeError} if the tangent is zero or nonfinite.
+   */
+  tangent(t: number): ReadonlyVec3 {
+    this.at(t);
+    let direction = this.evaluateTangent?.(t);
+    if (!direction) {
+      const h = 1e-4;
+      const at = (u: number) => this.at(this.isLoop() ? (u % 1 + 1) % 1 : u).position;
+      if (this.isLoop() || (t >= 2 * h && t <= 1 - 2 * h)) {
+        const a = at(t - 2 * h), b = at(t - h), c = at(t + h), d = at(t + 2 * h);
+        direction = [0, 1, 2].map(i => 8 * (c[i] - b[i]) - (d[i] - a[i])) as [number, number, number];
+      } else {
+        const sign = t < 0.5 ? 1 : -1;
+        const a = at(t), b = at(t + sign * h), c = at(t + sign * 2 * h);
+        direction = [0, 1, 2].map(i => sign * (4 * (b[i] - a[i]) - (c[i] - a[i]))) as [number, number, number];
+      }
+    }
+    const scale = Math.max(...Array.from(direction, Math.abs));
+    if (!Number.isFinite(scale) || scale === 0) throw new RangeError('A curve tangent must be finite and nonzero');
+    return vec3.normalize([0, 0, 0], Array.from(direction, x => x / scale) as [number, number, number]);
+  }
+
+  /**
+   * Sample through sample(), preserving each point's normalized parameter.
+   * @remarks Sampling overrides must return points obtained from this.at(t).
+   * @throws {@link RangeError} if sample parameters are unavailable or unordered.
+   */
+  sampleWithParameters(options: { resolution?: number } = {}): { t: number; point: Vertex }[] { return parameterizedSamples(this, options); }
 
   /** Test endpoint coordinate equality; no separate Loop class is required. */
   isLoop(): boolean { return Array.from(this.start.position).every((value, i) => value === this.end.position[i]); }
@@ -103,6 +140,7 @@ export class SpatialCurve implements SpatialBoundary {
 
   /**
    * Sample a polyline at the library's 0.001 chord-deviation resolution.
+   * @param options - Optional positive resolution; sweeps may request finer source samples.
    *
    * @remarks
    * Includes both endpoints, including the closing endpoint of a loop. Subdivision
@@ -112,11 +150,15 @@ export class SpatialCurve implements SpatialBoundary {
    * bounded without additional curvature information. An unresolved interval
    * throws instead of silently exceeding the subdivision limit.
    */
-  sample(): Vertex[] {
-    if (!this.planar) return this.sampleParameters().map(t => this.at(t));
+  sample({ resolution = TRIANGULATION_RESOLUTION }: { resolution?: number } = {}): Vertex[] {
+    if (!this.planar) return this.sampleParameters({ resolution }).map(t => this.at(t));
     const { curve, plane } = this.planar;
-    const points = curve.sample();
-    return points.map((point, i) => i === 0 ? this.start : i === points.length - 1 ? this.end : plane.toWorld(point));
+    const points = curve.sample({ resolution });
+    return points.map((point, i) => {
+      const vertex = i === 0 ? this.start : i === points.length - 1 ? this.end : plane.toWorld(point);
+      const t = sampleParameter(curve, point, i, points.length);
+      return t === undefined ? vertex : rememberSample(this, vertex, t);
+    });
   }
 }
 
@@ -125,10 +167,12 @@ export class SpatialCurve implements SpatialBoundary {
  *
  * Constructor shorthand for `new SpatialCurve(options)`; returns a new {@link SpatialCurve} instance.
  *
- * @param options - Exact evaluator and optional shared endpoint objects.
+ * @param options - Exact evaluator, optional tangent evaluator, and shared endpoint objects.
  * @throws {@link RangeError} if endpoint coordinates are nonfinite or disagree with the evaluator.
  */
 export function spatialCurve(options: {
+  /** Optional exact tangent evaluator; otherwise finite differences are used. */
+  tangent?: (t: number) => ReadonlyVec3;
   /** World-space evaluator on [0, 1]; responsible for the curve's parameterization. */
   at: (t: number) => Vertex;
   /** Optional shared vertex at zero; must agree with the evaluator. */

@@ -1,3 +1,4 @@
+import { rememberSample, parameterizedSamples } from './internal/curveSamples.js';
 import { validatePoint, type Point } from './Point.js';
 import { curveParameters } from './internal/curveSampling.js';
 import { TRIANGULATION_RESOLUTION } from './triangulation.js';
@@ -54,7 +55,7 @@ export class PlanarCurve implements PlanarLoop {
    */
   at(t: number): Point {
     if (!Number.isFinite(t) || t < 0 || t > 1) throw new RangeError('Curve parameter must be in [0, 1]');
-    return t === 0 ? this.start : t === 1 ? this.end : validatePoint(this.evaluate(t));
+    return rememberSample(this, t === 0 ? this.start : t === 1 ? this.end : validatePoint(this.evaluate(t)), t);
   }
 
   /**
@@ -85,6 +86,13 @@ export class PlanarCurve implements PlanarLoop {
     const x = direction[0] / scale, y = direction[1] / scale, length = Math.hypot(x, y);
     return [x / length, y / length];
   }
+
+  /**
+   * Sample through sample(), preserving each point's normalized parameter.
+   * @remarks Sampling overrides must return points obtained from this.at(t).
+   * @throws {@link RangeError} if sample parameters are unavailable or unordered.
+   */
+  sampleWithParameters(options: { resolution?: number } = {}): { t: number; point: Point }[] { return parameterizedSamples(this, options); }
 
   /** Test exact endpoint coordinate equality; no separate Loop class is required. */
   isLoop(): boolean { return this.start.x === this.end.x && this.start.y === this.end.y; }

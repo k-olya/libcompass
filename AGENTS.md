@@ -46,6 +46,19 @@
   its default uses finite differences and exact evaluators or overrides are
   allowed. Curve sampling overrides remain authoritative for draft analysis
   and tessellation; never replace a curve's equations with its polyline.
+- Sweep with `extrudeAlongCurve({ sketch, curve })` only along smooth regular
+  paths. Local (0, 0) follows the path; align the sketch normal to its tangent
+  and transport the in-plane axes with minimal twist. Correct residual rotation
+  for smooth closed paths and omit caps and physical seam edges there.
+- Keep a sweep's geometry parametric. Sampling stations are analysis/mesh data,
+  never intermediate solid edges or faces. Reject detected corners, cusps,
+  folds, self-intersections, nonmanifoldness, and unresolved numerical checks.
+  Numerical midpoint checks cannot certify arbitrary hidden oscillations.
+- `SpatialSurface` is a general at(u, v) surface; `RuledSurface` is its linear
+  rim/apex specialization. `Surface.boundaryLoops` lists physical boundaries,
+  possibly none for a closed periodic surface; only `Face` has outer/holes.
+  Refine both surface parameters and synchronize shared boundaries during
+  tessellation. Periodic seams must share mesh coordinates without adding edges.
 - Preserve shared vertex and edge identities in solids so topology can be reused
   for further operations. Curves remain mathematical through extrusion. Profile
   analysis may use temporary sampled polylines; triangulation generates the
@@ -70,7 +83,10 @@
   sample lifting, must call `.sample()`. Do not bypass overrides by calling
   `curveParameters()` or `.sampleParameters()` directly, or by constructing a
   polyline with independent `at(t)` probes. Parameter selection belongs inside
-  the curve's sampling implementation.
+  the curve's sampling implementation. `sampleWithParameters()` is an allowed
+  wrapper: it must call `.sample()` and retain its points and normalized t
+  metadata. Sampling overrides used by sweeps return `this.at(t)` points;
+  missing or unordered metadata must throw, never infer t from sample indices.
 
 # Earlier node prototypes
 

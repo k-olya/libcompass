@@ -145,10 +145,27 @@ export function triangulatePolygon(loops: readonly Loop[]): number[] {
     }
   }
   const points = loops.flat(), tolerance = tolerances(loops);
-  const holeIndices: number[] = [];
-  let offset = outer.length;
-  for (const hole of holes) { holeIndices.push(offset); offset += hole.length; }
-  let triangles = earcut(points.flatMap(point => [point.x, point.y]), holeIndices);
+  // Remove numerically collinear points for ear clipping, then restore their
+  // exact boundary identities below. Rotated dense straight rims otherwise
+  // create roundoff-sized sliver triangles inside the earcut input.
+  let sourceOffset = 0;
+  const simplified = loops.map(loop => {
+    const indices = loop.map((_, i) => sourceOffset + i);
+    sourceOffset += loop.length;
+    let changed = true;
+    while (changed && indices.length > 3) {
+      changed = false;
+      for (let i = 0; i < indices.length && indices.length > 3; i++) {
+        const previous = points[indices[(i + indices.length - 1) % indices.length]], current = points[indices[i]], next = points[indices[(i + 1) % indices.length]];
+        if (onSegment(previous, next, current, tolerance.length, tolerance.area)) { indices.splice(i--, 1); changed = true; }
+      }
+    }
+    return indices;
+  });
+  const mapping = simplified.flat(), holeIndices: number[] = [];
+  let offset = simplified[0].length;
+  for (const hole of simplified.slice(1)) { holeIndices.push(offset); offset += hole.length; }
+  let triangles = earcut(mapping.flatMap(index => [points[index].x, points[index].y]), holeIndices).map(index => mapping[index]);
 
   // Earcut may filter collinear vertices when bridging holes. Split triangle
   // edges at any omitted boundary vertices so cap and side meshes still meet.

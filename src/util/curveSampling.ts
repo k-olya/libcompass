@@ -12,20 +12,20 @@ export function curveParameters(curve: ParametricCurve, resolution = TRIANGULATI
   const cached = cache.get(curve) ?? new Map<number, readonly number[]>();
   const existing = cached.get(resolution);
   if (existing) return existing;
+  // ponytail: midpoint probes can miss oscillations; stronger bounds belong in a specialized sampler.
   const parameters = [0];
   const refine = (a: number, b: number, depth: number): void => {
     const start = coordinates(curve.at(a)), end = coordinates(curve.at(b));
-    const error = Math.max(...[0.25, 0.5, 0.75].map(fraction => {
-      const point = coordinates(curve.at(a + (b - a) * fraction));
-      return Math.hypot(...point.map((value, i) => value - (start[i] + (end[i] - start[i]) * fraction)));
-    }));
+    const middle = coordinates(curve.at((a + b) / 2));
+    const error = Math.hypot(...middle.map((value, i) => value - (start[i] + end[i]) / 2));
     if (error > resolution) {
       if (depth >= 20) throw new RangeError('Curve cannot be sampled at the triangulation resolution');
       const middle = (a + b) / 2;
       refine(a, middle, depth + 1); refine(middle, b, depth + 1);
     } else parameters.push(b);
   };
-  for (let i = 0; i < 8; i++) refine(i / 8, (i + 1) / 8, 0);
+  refine(0, 0.5, 0);
+  refine(0.5, 1, 0);
   cached.set(resolution, parameters);
   cache.set(curve, cached);
   return parameters;

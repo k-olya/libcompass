@@ -4,13 +4,13 @@ import { Circle, PlanarCurve, Plane, Sketch, SpatialCurve, TRIANGULATION_RESOLUT
 
 const close = (actual, expected, tolerance = 1e-11) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected}`);
 
-test('sketches retain planar curves and do not silently discard unsupported extrusion profiles', () => {
+test('sketches retain planar curves and reject open extrusion profiles', () => {
   const curve = planarCurve({ at: t => ({ x: t, y: t * t }) });
   const sketch = new Sketch().add(curve);
   assert.equal(sketch.elements[0], curve);
-  assert.throws(() => sketch.extrude({ direction: [0, 0, 1] }), /only circular planar curves/);
+  assert.throws(() => sketch.extrude({ direction: [0, 0, 1] }), /closed/);
   sketch.add(new Circle({ center: { x: 0, y: 0 }, radius: 2 }));
-  assert.throws(() => sketch.extrude({ direction: [0, 0, 1] }), /only circular planar curves/);
+  assert.throws(() => sketch.extrude({ direction: [0, 0, 1] }), /closed/);
 });
 
 test('circles are normalized planar curves with exact shared loop endpoints', () => {
@@ -76,6 +76,7 @@ test('fromPlanarCurve lifts open curves exactly onto a copied placement frame wi
   assert.deepEqual(lifted.end.position, [3, -3, 5]);
   plane.origin[2] = 99;
   assert.deepEqual(lifted.at(0.25).position, [2.25, -3, 4.0625]);
+  delete curve.sample; // Construction was lazy; sampling now delegates to the planar curve.
   assert.equal(lifted.sample().at(-1), lifted.end);
   assert.throws(() => SpatialCurve.fromPlanarCurve({ curve: {} }), TypeError);
   assert.equal('fromCircle' in SpatialCurve, false);
@@ -127,7 +128,7 @@ test('lifting accepts plain parametric evaluators and delegates subclass subdivi
   assert.deepEqual(spatial.sample().map(vertex => vertex.position[0]), parameters);
 });
 
-test('subdivision resolution is validated and circle-specific bounds remain in Circle', () => {
+test('subdivision resolution is validated and circles share the generic sampler', () => {
   const circle = new Circle({ center: { x: 0, y: 0 }, radius: 2 });
   const curve = new PlanarCurve({ at: t => ({ x: t, y: t * t }) });
   for (const definition of [circle, curve]) {
@@ -142,4 +143,21 @@ test('subdivision resolution is validated and circle-specific bounds remain in C
       assert.throws(() => lifted.sampleParameters({ resolution }), RangeError);
     }
   }
+});
+
+
+test('midpoint deviation controls dyadic subdivision for both planar and spatial curves', () => {
+  const curve = new PlanarCurve({ at: t => ({ x: t, y: t * t }) });
+  assert.deepEqual(curve.sampleParameters({ resolution: 0.1 }), [0, 0.5, 1]);
+  assert.deepEqual(curve.sampleParameters({ resolution: 0.01 }), Array.from({ length: 9 }, (_, i) => i / 8));
+  const spatial = SpatialCurve.fromPlanarCurve({ curve });
+  const parameters = curve.sampleParameters();
+  assert.equal(spatial.sampleParameters(), parameters);
+  for (let i = 1; i < parameters.length; i++) {
+    const a = curve.at(parameters[i - 1]), b = curve.at(parameters[i]);
+    const middle = curve.at((parameters[i - 1] + parameters[i]) / 2);
+    assert.ok(Math.hypot(middle.x - (a.x + b.x) / 2, middle.y - (a.y + b.y) / 2) <= TRIANGULATION_RESOLUTION);
+  }
+  assert.equal(Circle.prototype.sampleParameters, PlanarCurve.prototype.sampleParameters);
+  assert.equal(new Circle({ center: { x: 0, y: 0 }, radius: 10 }).sample().length, 257);
 });

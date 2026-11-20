@@ -15,8 +15,8 @@ export type SketchElement = Point | Line | LineSegment | PlanarCurve;
  * Local 2D drawing geometry placed on a plane in world space.
  *
  * @remarks
- * Sketches can store any planar curve. Extrusion currently supports closed
- * segment loops and circles as profiles. Nesting uses even-odd fill
+ * Sketches can store any planar curve. Extrusion assembles closed profiles
+ * from planar curves and line segments. Nesting uses even-odd fill
  * to distinguish material, holes, and islands; points and infinite lines are
  * construction geometry. Segment endpoints match by exact XY coordinates.
  *

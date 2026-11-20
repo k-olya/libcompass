@@ -122,9 +122,24 @@ retain their captured geometry, which should be treated as immutable.
 placement. Spatial curves have no shape-specific properties or copying logic.
 This conversion does not sample the curve.
 `SketchElement` is `Point | Line | LineSegment | PlanarCurve`, including `Circle`
-through inheritance. Sketches retain general planar curves, but extrusion
-currently supports only segment profiles and circles; it rejects other planar
-curves explicitly. These curves can be lifted to form spatial boundaries and surfaces.
+through inheritance. Extrusion accepts closed planar curves and assembles open
+curves and line segments into closed, unbranched profiles. Construction points and
+infinite lines do not contribute to profiles.
+
+`PlanarLoop` is an interface with `area()` and `contains({ point })`, describing
+a simple closed boundary and its strict interior. `PlanarCurve` provides these
+methods for loops; calling them on an open curve throws. Composite profiles
+implement the same interface. Reversing a loop's winding does not change its
+positive area or containment.
+
+Profile area, containment, nesting, and intersection checks use temporary sampled
+polylines and ordinary polygon algorithms. The original curves are retained for
+extrusion into exact `SpatialCurve` boundaries and `SpatialSurface` walls. Sample
+points never become topological vertices or straight replacements for curves.
+There are no curve-type intersection equations or circle-specific profile rules.
+Analysis is approximate at the sampling resolution, so very narrow gaps, touches,
+and other features smaller than that resolution may be classified differently.
+Geometry captured by evaluators must remain immutable.
 
 `SpatialBoundary` is the common interface implemented by edges and spatial curves:
 `start`, `end`, `at(t)`, `sample()`, and `isLoop()`. A loop has identical start and
@@ -134,12 +149,26 @@ parameterization. It is a circumference fraction for circular curves; procedural
 curves need not have constant speed. `sample()` includes both endpoints, even
 for a loop. This closing-point convention applies to every curve, including
 `PlanarCurve.sample()` and `Circle.sample()`: loops always repeat the closing point.
-Circle sample counts are derived from radius and the library resolution.
 `sampleParameters({ resolution })` returns normalized parameters including zero
-and one. The default planar and spatial implementations adaptively evaluate the
-curve; `Circle` overrides this method using its radius-based bound. Lifted curves
-delegate to their planar definition, so new curve types can customize sampling
-without adding type checks to `SpatialCurve` or the shared tessellation code.
+and one. All planar and spatial curves use the same adaptive midpoint algorithm:
+start with `[0, 0.5, 1]`, then halve each interval until the distance between its
+curve midpoint and chord midpoint is at most the resolution. `Circle` inherits
+this sampler; it has no radius-based sampling override. Lifted curves delegate
+to their planar definition. Straight edges sample only their endpoints.
+
+`sample()` is the override point for oscillatory curves or specialized sampling.
+It returns ordered points, including both endpoints and the repeated closing
+point of a loop. The default maps `sampleParameters()` through `at(t)`; an
+override can return its own samples without implementing parameter selection.
+Lifted spatial curves delegate to the original curve's `sample()` override.
+
+Profile analysis and tessellation both consume `sample()`. Tessellation pairs
+rim polylines by sample order, inserting interpolated segment vertices as needed
+to retain every supplied point and keep caps and walls watertight. For arbitrary
+ruled patches this is an approximate sample-order correspondence; `at(u, v)`
+retains its exact parameterization. Extrusion pairs translated copies of the same
+samples. Consumers contain no curve-type special cases or independent deviation
+tests.
 
 ```ts
 import { Circle, Plane, SpatialCurve } from 'libcompass';
@@ -193,19 +222,19 @@ Solid triangulation includes its own surfaces followed by child geometry and is
 cached until `refresh()` is called. Treat cached arrays as read-only. Topology
 properties describe the solid's own surfaces, excluding children.
 
-Circles stay analytic through extrusion. Segment loops and circle intersections
-are validated directly, using even-odd nesting and scale-relative numeric
-comparisons. There is no triangulation during solid construction.
+Planar curves retain their equations through extrusion. Profile validation and
+even-odd nesting use sampled polylines, without shape checks in profile assembly. Mixed curves and straight edges share endpoint vertices and vertical
+edges. There is no triangulation during solid construction.
 
 `TRIANGULATION_RESOLUTION` is currently fixed library-wide at `0.001` model units:
-the maximum circular chord deviation. Triangulation derives circle segment counts
-from radius, samples shared boundaries together, and uses Earcut for planar caps.
+the target midpoint-to-chord deviation. Triangulation samples shared boundaries
+together and uses Earcut for planar caps.
 Collinear boundary vertices are preserved to prevent cracks. Only the final
 triangle output uses `Float32Array`; analytic coordinate evaluation uses JavaScript
 numbers. Changing mesh density never changes the stored mathematical geometry.
 
-Procedural curves use adaptive quarter-point error probes, which cannot guarantee
-an error bound for arbitrary oscillations between probes. `SpatialSurface`
+Adaptive midpoint probes can miss oscillations between probes; they do not
+provide a certified global error bound for arbitrary evaluators. `SpatialSurface`
 currently represents ruled patches, including cylindrical and oblique extrusion
 walls; arbitrary doubly curved surfaces, sketch booleans, and constraints remain
 outside the current API. Invalid trim intersections or triangulations fail

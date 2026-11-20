@@ -8,8 +8,7 @@ import type { SpatialBoundary } from './SpatialBoundary.js';
 import { SpatialCurve } from './SpatialCurve.js';
 import { SpatialSurface } from './SpatialSurface.js';
 import type { Surface } from './Surface.js';
-import { validateVertex, type Vertex } from './Vertex.js';
-import { signedArea } from './util/polygon.js';
+import { validateVertex } from './Vertex.js';
 import { profileAnchor, profileArea, profileContains, sketchProfiles, type Profile } from './util/profiles.js';
 
 /**
@@ -18,21 +17,22 @@ import { profileAnchor, profileArea, profileContains, sketchProfiles, type Profi
  * @remarks
  * Even-odd nesting determines material, holes, and islands independently of
  * contour winding and insertion order. Points and infinite lines are ignored
- * as construction geometry. Circles remain circular spatial boundaries with
- * ruled side surfaces. No curve sampling or triangulation occurs here.
+ * as construction geometry. Curves remain mathematical spatial boundaries with
+ * ruled side surfaces. Temporary sampled polylines determine profile area,
+ * intersections, and nesting; no triangle mesh is created here.
  *
- * The result is a snapshot with shared boundary and vertex identities. Only
- * triangulation introduces facets, at the library-wide resolution of 0.001.
+ * The placement is copied; treat source curve evaluators as immutable. Boundary
+ * and vertex identities are shared. Only triangulation introduces facets,
+ * at the library-wide resolution of 0.001.
  *
  * @param options - Sketch and world-space displacement.
- * @param options.sketch - Closed segment profiles and analytic circles.
+ * @param options.sketch - Closed profiles of planar curves and line segments.
  * @param options.direction - Finite displacement with a nonzero normal component;
  * oblique and negative extrusion are supported. The normal component must
  * exceed `1e-10` times its length.
  * @returns A solid with planar caps and exact planar or ruled side surfaces.
  * @throws {@link RangeError} if direction or profiles are invalid, open,
  * branched, degenerate, intersecting, or touching.
- * @throws {@link TypeError} if a noncircular planar curve is present.
  *
  * @example
  * ```ts
@@ -69,21 +69,24 @@ export function extrude({ sketch, direction }: { sketch: Sketch; direction: Read
   const bottomFrame = frame([0, 0, 0]), topFrame = frame(displacement);
   const surfaces: Surface[] = [];
   const lift = (profile: Profile, hole: boolean): { bottom: SpatialBoundary[]; top: SpatialBoundary[]; sides: Face | SpatialSurface }[] => {
-    if (profile.circle) {
-      const bottom = SpatialCurve.fromPlanarCurve({ curve: profile.circle, plane: bottomFrame });
-      const top = SpatialCurve.fromPlanarCurve({ curve: profile.circle, plane: topFrame });
-      return [{ bottom: [bottom], top: [top], sides: new SpatialSurface({ start: bottom, end: top, reversed: (depth < 0) !== hole }) }];
-    }
-    const points = (signedArea(profile.points) > 0) !== hole ? profile.points : [...profile.points].reverse();
-    const bottom = points.map(point => bottomFrame.toWorld(point));
-    const top = bottom.map(vertex => validateVertex({ position: vec3.add([0, 0, 0], vertex.position, displacement) }));
-    const vertical = bottom.map((vertex, i) => new Edge({ start: vertex, end: top[i] }));
-    return bottom.map((vertex, i) => {
-      const next = (i + 1) % bottom.length;
-      const lower = new Edge({ start: vertex, end: bottom[next] });
-      const upper = new Edge({ start: top[i], end: top[next] });
-      const outer = [lower, vertical[next], upper, vertical[i]];
-      return { bottom: [lower], top: [upper], sides: new Face({ outer: depth > 0 ? outer : [...outer].reverse() }) };
+    const reverse = (profile.signedArea > 0) === hole;
+    const entries = reverse ? [...profile.boundaries].reverse().map(b => ({ ...b, reversed: !b.reversed })) : profile.boundaries;
+    const bottomVertices = entries.map(({ curve, reversed }) => bottomFrame.toWorld(reversed ? curve.end : curve.start));
+    const topVertices = bottomVertices.map(vertex => validateVertex({ position: vec3.add([0, 0, 0], vertex.position, displacement) }));
+    const vertical = bottomVertices.map((vertex, i) => new Edge({ start: vertex, end: topVertices[i] }));
+    return entries.map(({ curve, reversed, straight }, i) => {
+      const next = (i + 1) % entries.length;
+      if (straight) {
+        const lower = new Edge({ start: bottomVertices[i], end: bottomVertices[next] });
+        const upper = new Edge({ start: topVertices[i], end: topVertices[next] });
+        const outer = [lower, vertical[next], upper, vertical[i]];
+        return { bottom: [lower], top: [upper], sides: new Face({ outer: depth > 0 ? outer : [...outer].reverse() }) };
+      }
+      const start = reversed ? next : i, end = reversed ? i : next;
+      const lower = SpatialCurve.fromPlanarCurve({ curve, plane: bottomFrame, start: bottomVertices[start], end: bottomVertices[end] });
+      const upper = SpatialCurve.fromPlanarCurve({ curve, plane: topFrame, start: topVertices[start], end: topVertices[end] });
+      return { bottom: [lower], top: [upper], sides: new SpatialSurface({ start: lower, end: upper,
+        sides: curve.isLoop() ? undefined : [vertical[end], vertical[start]], reversed: (depth < 0) !== reversed }) };
     });
   };
   profiles.forEach((outer, index) => {

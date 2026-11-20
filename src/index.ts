@@ -20,6 +20,7 @@ export { Line, line } from './Line.js';
 export { LineSegment, lineSegment } from './LineSegment.js';
 export { Circle, circle } from './Circle.js';
 export { PlanarCurve, planarCurve } from './PlanarCurve.js';
+export type { PlanarLoop } from './PlanarLoop.js';
 export { Plane, plane } from './Plane.js';
 export { Sketch, sketch, type SketchElement } from './Sketch.js';
 export type { Vertex } from './Vertex.js';

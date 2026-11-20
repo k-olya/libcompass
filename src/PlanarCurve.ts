@@ -1,6 +1,8 @@
 import { validatePoint, type Point } from './Point.js';
 import { curveParameters } from './util/curveSampling.js';
 import { TRIANGULATION_RESOLUTION } from './triangulation.js';
+import type { PlanarLoop } from './PlanarLoop.js';
+import { containsInterior, signedArea } from './util/polygon.js';
 
 /**
  * An exact curve in local XY coordinates with a normalized [0, 1] parameter.
@@ -9,8 +11,9 @@ import { TRIANGULATION_RESOLUTION } from './triangulation.js';
  * The evaluator defines the parameterization; it need not have constant speed.
  * Geometry remains mathematical until sample() is called. Use
  * {@link SpatialCurve.fromPlanarCurve} to place the curve on a world-space plane.
+ * Profile analysis uses sampled polylines; lifting retains the exact evaluator.
  */
-export class PlanarCurve {
+export class PlanarCurve implements PlanarLoop {
   /** Shared point at parameter zero. */
   readonly start: Point;
   /** Shared point at parameter one; matching endpoint coordinates define a loop. */
@@ -53,12 +56,24 @@ export class PlanarCurve {
   /** Test exact endpoint coordinate equality; no separate Loop class is required. */
   isLoop(): boolean { return this.start.x === this.end.x && this.start.y === this.end.y; }
 
+  /** Approximate enclosed area of a simple loop, using its sampled polyline. */
+  area(): number {
+    if (!this.isLoop()) throw new RangeError('Area requires a closed planar loop');
+    return Math.abs(signedArea(this.sample().slice(0, -1)));
+  }
+
+  /** Approximate strict interior containment against the sampled loop. */
+  contains({ point }: { point: Point }): boolean {
+    if (!this.isLoop()) throw new RangeError('Containment requires a closed planar loop');
+    return containsInterior(this.sample().slice(0, -1), validatePoint(point));
+  }
+
   /**
    * Choose normalized parameters for a polyline, including zero and one.
    * @param options - Optional positive chord-deviation resolution in model units.
    * @remarks
-   * Uses adaptive evaluation by default. Subclasses can provide tighter bounds
-   * or a specialized subdivision rule without changing spatial curve code.
+   * Starts with zero, one half, and one. Each interval is halved until its
+   * curve midpoint deviates from its chord midpoint by at most resolution.
    * @throws {@link RangeError} if resolution is invalid or subdivision cannot converge.
    */
   sampleParameters({ resolution = TRIANGULATION_RESOLUTION }: { resolution?: number } = {}): readonly number[] {
@@ -70,9 +85,11 @@ export class PlanarCurve {
    *
    * @remarks
    * Includes both endpoints, including the repeated closing point of a loop.
-   * Subdivision comes from sampleParameters(). Adaptive evaluators use
-   * quarter-point probes; arbitrary oscillations between probes cannot be bounded
-   * without additional curvature information. Unresolved subdivision throws.
+   * Subdivision comes from sampleParameters(). Midpoint probes can miss
+   * oscillations between probes; they are an approximation, not a certified
+   * global deviation bound. Unresolved subdivision throws.
+   * Override this method for oscillatory curves or a specialized sampling rule;
+   * profile analysis and lifted spatial curves consume these returned points.
    */
   sample(): Point[] {
     return this.sampleParameters().map(t => this.at(t));

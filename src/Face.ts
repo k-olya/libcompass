@@ -1,8 +1,5 @@
 import { vec3 } from 'gl-matrix';
-import { Edge } from './Edge.js';
-import { Circle } from './Circle.js';
 import { Plane } from './Plane.js';
-import { SpatialCurve } from './SpatialCurve.js';
 import type { SpatialBoundary } from './SpatialBoundary.js';
 import { Surface } from './Surface.js';
 import type { Vertex } from './Vertex.js';
@@ -14,8 +11,8 @@ import type { Tessellation } from './util/Tessellation.js';
  * A planar surface trimmed by exact edges and spatial curves.
  *
  * @remarks
- * Trim objects retain their identities. Curves are sampled only during
- * triangulation; constructing a face does not create triangle connectivity.
+ * Trim objects retain their identities. Sampled polylines validate the plane
+ * and boundaries; constructing a face does not create triangle connectivity.
  * Only Face, rather than SpatialSurface, can supply a sketch plane.
  */
 export class Face extends Surface {
@@ -28,7 +25,8 @@ export class Face extends Surface {
    * @param options - Outer trim, optional holes, and optional oriented plane.
    * Without a plane, orientation follows the outer trim's traversal.
    * @throws {@link RangeError} if trims are open, degenerate, or nonplanar.
-   * Curved trim separation and tessellation are checked when triangulating.
+   * Trim separation is checked on sampled polylines; tessellation is checked
+   * when triangulating.
    */
   constructor({ outer, holes = [], plane }: {
     outer: readonly SpatialBoundary[];
@@ -37,10 +35,11 @@ export class Face extends Surface {
   }) {
     super({ outer, holes });
     const anchors = (loop: readonly SpatialBoundary[]) => orientLoop(loop).flatMap(({ boundary, reversed }) => {
-      const parameters = boundary instanceof SpatialCurve ? [0, 0.25, 0.5, 0.75] : [0];
-      return parameters.map(t => boundary.at(reversed ? 1 - t : t));
+      const points = boundary.sample();
+      return (reversed ? [...points].reverse() : points).slice(0, -1);
     });
-    const points = anchors(this.outer);
+    const loops = [this.outer, ...this.holes].map(anchors);
+    const points = loops[0];
     if (!plane) {
       for (let i = 1; i + 1 < points.length; i++) {
         const a = vec3.subtract([0, 0, 0], points[i].position, points[0].position);
@@ -55,38 +54,7 @@ export class Face extends Surface {
     }
     if (!plane) throw new RangeError('A face needs a nondegenerate planar boundary');
     this.plane = plane;
-    const loops = [this.outer, ...this.holes];
-    for (const loop of loops) anchors(loop).forEach(vertex => this.plane.toLocal(vertex));
-    if (this.boundaries.every(boundary => boundary instanceof Edge)) {
-      const polygons = loops.map(loop => anchors(loop).map(vertex => this.plane.toLocal(vertex)));
-      validateLoops(polygons);
-    }
-  }
-
-  protected override prepare(context: Tessellation): void {
-    // Exact circular clearances prevent a valid narrow gap from being crossed by chords.
-    for (const boundary of this.boundaries) {
-      if (!(boundary instanceof SpatialCurve) || !(boundary.planarCurve instanceof Circle) || !boundary.plane) continue;
-      const center = this.plane.toLocal(boundary.plane.toWorld(boundary.planarCurve.center));
-      const radius = boundary.planarCurve.radius;
-      for (const other of this.boundaries) {
-        if (other === boundary) continue;
-        let gap: number | undefined;
-        if (other instanceof SpatialCurve && other.planarCurve instanceof Circle && other.plane) {
-          const otherCenter = this.plane.toLocal(other.plane.toWorld(other.planarCurve.center));
-          const distance = Math.hypot(center.x - otherCenter.x, center.y - otherCenter.y);
-          gap = Math.max(distance - radius - other.planarCurve.radius, Math.abs(radius - other.planarCurve.radius) - distance);
-        } else if (other instanceof Edge) {
-          const a = this.plane.toLocal(other.start), b = this.plane.toLocal(other.end);
-          const dx = b.x - a.x, dy = b.y - a.y;
-          const t = Math.max(0, Math.min(1, ((center.x - a.x) * dx + (center.y - a.y) * dy) / (dx * dx + dy * dy)));
-          const closest = Math.hypot(a.x + dx * t - center.x, a.y + dy * t - center.y);
-          const farthest = Math.max(Math.hypot(a.x - center.x, a.y - center.y), Math.hypot(b.x - center.x, b.y - center.y));
-          gap = Math.max(closest - radius, radius - farthest);
-        }
-        if (gap !== undefined && gap > 0) context.requestResolution(boundary, gap / 4);
-      }
-    }
+    validateLoops(loops.map(loop => loop.map(vertex => this.plane.toLocal(vertex))));
   }
 
   protected override mesh(context: Tessellation): Float32Array {
@@ -112,7 +80,8 @@ export class Face extends Surface {
  * @param options - Outer trim, optional holes, and optional oriented plane.
  * Without a plane, orientation follows the outer trim's traversal.
  * @throws {@link RangeError} if trims are open, degenerate, or nonplanar.
- * Curved trim separation and tessellation are checked when triangulating.
+ * Trim separation is checked on sampled polylines; tessellation is checked
+ * when triangulating.
  */
 export function face(options: {
   /** Ordered, closed outer loop of shared edges and spatial curves. */

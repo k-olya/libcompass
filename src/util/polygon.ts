@@ -60,6 +60,13 @@ function onSegment(a: Point, b: Point, p: Point, length: number, area: number): 
     p.y >= Math.min(a.y, b.y) - length && p.y <= Math.max(a.y, b.y) + length;
 }
 
+/** Strict interior of an approximate polygon; excludes its line segments. */
+export function containsInterior(loop: Loop, point: Point): boolean {
+  if (!containsPoint(loop, point)) return false;
+  const tolerance = tolerances([loop]);
+  return !loop.some((a, i) => onSegment(a, loop[(i + 1) % loop.length], point, tolerance.length, tolerance.area));
+}
+
 function intersects(a: Point, b: Point, c: Point, d: Point, length: number, area: number): boolean {
   const abC = cross(a, b, c), abD = cross(a, b, d);
   const cdA = cross(c, d, a), cdB = cross(c, d, b);

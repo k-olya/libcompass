@@ -56,15 +56,22 @@ export class SpatialCurve implements SpatialBoundary {
    * one endpoint vertex; open curves retain distinct endpoints.
    * @throws {@link TypeError} if curve has no at(t) evaluator.
    */
-  static fromPlanarCurve({ curve, plane = new Plane() }: { curve: Pick<PlanarCurve, 'at'>; plane?: Plane }): SpatialCurve {
+  static fromPlanarCurve({ curve, plane = new Plane(), start, end }: {
+    curve: Pick<PlanarCurve, 'at'>;
+    plane?: Plane;
+    /** Optional shared world-space vertex at zero; must agree with the evaluator. */
+    start?: Vertex;
+    /** Optional shared world-space vertex at one; must agree with the evaluator. */
+    end?: Vertex;
+  }): SpatialCurve {
     if (typeof curve?.at !== 'function') throw new TypeError('A planar curve needs an at(t) evaluator');
     const definition = curve instanceof PlanarCurve ? curve : new PlanarCurve({ at: t => curve.at(t) });
     const frame = new Plane({ a: [...plane.origin] as [number, number, number],
       b: Array.from(plane.origin).map((value, i) => value + plane.xAxis[i]) as [number, number, number],
       c: Array.from(plane.origin).map((value, i) => value + plane.yAxis[i]) as [number, number, number] });
     const at = (t: number) => frame.toWorld(definition.at(t));
-    const start = at(0);
-    const spatial = new SpatialCurve({ at, start, end: definition.isLoop() ? start : at(1) });
+    const first = start ?? at(0);
+    const spatial = new SpatialCurve({ at, start: first, end: end ?? (definition.isLoop() ? first : at(1)) });
     spatial.planar = { curve: definition, plane: frame };
     return spatial;
   }
@@ -87,7 +94,7 @@ export class SpatialCurve implements SpatialBoundary {
    * @param options - Optional positive chord-deviation resolution in model units.
    * @remarks
    * Lifted curves delegate to their planar definition; other curves use adaptive
-   * evaluation. Shared surface tessellation may refine these parameters further.
+   * evaluation. This is a parameter-selection utility; consumers use sample() for polylines.
    * @throws {@link RangeError} if resolution is invalid or subdivision cannot converge.
    */
   sampleParameters({ resolution = TRIANGULATION_RESOLUTION }: { resolution?: number } = {}): readonly number[] {
@@ -99,12 +106,18 @@ export class SpatialCurve implements SpatialBoundary {
    *
    * @remarks
    * Includes both endpoints, including the closing endpoint of a loop. Subdivision
-   * comes from sampleParameters(). Adaptive evaluators are checked at quarter
-   * points; arbitrary oscillations between probes cannot be
+   * defaults to sampleParameters(). Lifted curves delegate to their planar
+   * definition's sample(), including overrides. Adaptive evaluators compare
+   * curve and chord midpoints; arbitrary oscillations between probes cannot be
    * bounded without additional curvature information. An unresolved interval
    * throws instead of silently exceeding the subdivision limit.
    */
-  sample(): Vertex[] { return this.sampleParameters().map(t => this.at(t)); }
+  sample(): Vertex[] {
+    if (!this.planar) return this.sampleParameters().map(t => this.at(t));
+    const { curve, plane } = this.planar;
+    const points = curve.sample();
+    return points.map((point, i) => i === 0 ? this.start : i === points.length - 1 ? this.end : plane.toWorld(point));
+  }
 }
 
 /**

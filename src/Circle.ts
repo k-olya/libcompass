@@ -1,6 +1,5 @@
 import { validatePoint, type Point } from './Point.js';
 import { PlanarCurve } from './PlanarCurve.js';
-import { circleSegments, TRIANGULATION_RESOLUTION } from './triangulation.js';
 
 /**
  * An analytic planar curve tracing one counterclockwise circle on [0, 1].
@@ -35,17 +34,6 @@ export class Circle extends PlanarCurve {
     super({ at, start, end: start });
     this.center = center;
     this.radius = radius;
-  }
-
-  /**
-   * Choose uniform parameters from the exact circular chord-deviation bound.
-   * @param options - Optional positive chord-deviation resolution in model units.
-   * @returns Parameters from zero to one, including the closing endpoint.
-   * @throws {@link RangeError} if resolution is invalid or the segment count is too large.
-   */
-  override sampleParameters({ resolution = TRIANGULATION_RESOLUTION }: { resolution?: number } = {}): readonly number[] {
-    const count = circleSegments(this.radius, resolution);
-    return Array.from({ length: count + 1 }, (_, i) => i / count);
   }
 }
 

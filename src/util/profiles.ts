@@ -1,71 +1,63 @@
-import { Circle } from '../Circle.js';
 import { LineSegment } from '../LineSegment.js';
 import { PlanarCurve } from '../PlanarCurve.js';
+import type { PlanarLoop } from '../PlanarLoop.js';
 import type { Point } from '../Point.js';
 import type { Sketch } from '../Sketch.js';
-import { containsPoint, signedArea, validateLoops } from './polygon.js';
+import { containsInterior, signedArea, validateLoops } from './polygon.js';
 
-/** Exact input profiles; curves are never sampled to decide topology. */
-export type Profile = { circle: Circle; points?: never } | { points: Point[]; circle?: never };
+/** Original oriented boundaries retained alongside temporary analysis polylines. */
+export type ProfileBoundary = { curve: PlanarCurve; reversed: boolean; straight: false }
+  | { curve: LineSegment; reversed: boolean; straight: true };
+export class Profile implements PlanarLoop {
+  readonly boundaries: ProfileBoundary[];
+  readonly points: Point[];
+  readonly signedArea: number;
+  readonly anchor: Point;
+  constructor({ boundaries }: { boundaries: ProfileBoundary[] }) {
+    this.boundaries = boundaries;
+    this.points = boundaries.flatMap(({ curve, reversed, straight }) => {
+      const points = straight ? [curve.start, curve.end] : curve.sample();
+      return (reversed ? [...points].reverse() : points).slice(0, -1);
+    });
+    this.anchor = this.points[0];
+    this.signedArea = signedArea(this.points);
+  }
+  area(): number { return Math.abs(this.signedArea); }
+  contains({ point }: { point: Point }): boolean { return containsInterior(this.points, point); }
+}
+export const profileArea = (profile: Profile): number => profile.area();
+export const profileAnchor = (profile: Profile): Point => profile.anchor;
+export const profileContains = (profile: Profile, point: Point): boolean => profile.contains({ point });
 
-export const profileArea = (profile: Profile): number => profile.circle ? Math.PI * profile.circle.radius ** 2 : Math.abs(signedArea(profile.points));
-export const profileAnchor = (profile: Profile): Point => profile.circle ? profile.circle.at(0) : profile.points[0];
-export const profileContains = (profile: Profile, point: Point): boolean => profile.circle
-  ? Math.hypot(point.x - profile.circle.center.x, point.y - profile.circle.center.y) < profile.circle.radius
-  : containsPoint(profile.points, point);
-
-/** Assemble segment loops and classify circle intersections analytically. */
+/** Assemble exact boundaries, then analyze their sampled polylines. */
 export function sketchProfiles(sketch: Sketch): Profile[] {
-  if (sketch.elements.some(element => element instanceof PlanarCurve && !(element instanceof Circle))) {
-    throw new TypeError('Extrusion currently supports only circular planar curves');
-  }
-  const circles = sketch.elements.filter((element): element is Circle => element instanceof Circle)
-    .map(circle => new Circle({ center: { ...circle.center }, radius: circle.radius }));
-  const segments = new Set(sketch.elements.filter((element): element is LineSegment => element instanceof LineSegment));
+  const boundaries: ProfileBoundary[] = sketch.elements.flatMap<ProfileBoundary>(element => element instanceof PlanarCurve
+    ? [{ curve: element, reversed: false, straight: false }]
+    : element instanceof LineSegment ? [{ curve: element, reversed: false, straight: true }] : []);
+  const closed = ({ curve, straight }: ProfileBoundary) => !straight && curve.isLoop();
+  const profiles = boundaries.filter(closed).map(boundary => new Profile({ boundaries: [boundary] }));
+  const open = new Set(boundaries.filter(boundary => !closed(boundary)));
   const equal = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
-  const degree = (point: Point) => [...segments].filter(segment => equal(segment.start, point) || equal(segment.end, point)).length;
-  for (const segment of segments) {
-    if (degree(segment.start) !== 2 || degree(segment.end) !== 2) throw new RangeError('Sketch segments must form closed, unbranched loops');
+  const degree = (point: Point) => [...open].filter(({ curve }) => equal(curve.start, point) || equal(curve.end, point)).length;
+  for (const { curve } of open) {
+    if (degree(curve.start) !== 2 || degree(curve.end) !== 2) throw new RangeError('Sketch boundaries must form closed, unbranched loops');
   }
-  const polygons: Point[][] = [];
-  while (segments.size) {
-    const first = segments.values().next().value!;
-    segments.delete(first);
-    const points = [{ ...first.start }];
-    let end = first.end;
-    while (!equal(end, first.start)) {
-      points.push({ ...end });
-      const next = [...segments].find(segment => equal(segment.start, end) || equal(segment.end, end));
-      if (!next) throw new RangeError('Sketch segments must form closed loops');
-      segments.delete(next);
-      end = equal(next.start, end) ? next.end : next.start;
+  while (open.size) {
+    const first = open.values().next().value!;
+    open.delete(first);
+    const loop = [first];
+    let end = first.curve.end;
+    while (!equal(end, first.curve.start)) {
+      const next = [...open].find(({ curve }) => equal(curve.start, end) || equal(curve.end, end));
+      if (!next) throw new RangeError('Sketch boundaries must form closed loops');
+      open.delete(next);
+      next.reversed = !equal(next.curve.start, end);
+      loop.push(next);
+      end = next.reversed ? next.curve.start : next.curve.end;
     }
-    polygons.push(points);
+    profiles.push(new Profile({ boundaries: loop }));
   }
-  if (!polygons.length && !circles.length) throw new RangeError('Extrusion needs at least one closed profile');
-  validateLoops(polygons);
-  for (const circle of circles) {
-    for (const polygon of polygons) {
-      for (let i = 0; i < polygon.length; i++) {
-        const a = polygon[i], b = polygon[(i + 1) % polygon.length];
-        const dx = b.x - a.x, dy = b.y - a.y;
-        const fraction = Math.max(0, Math.min(1, ((circle.center.x - a.x) * dx + (circle.center.y - a.y) * dy) / (dx * dx + dy * dy)));
-        const distance = Math.hypot(a.x + dx * fraction - circle.center.x, a.y + dy * fraction - circle.center.y);
-        const farthest = Math.max(Math.hypot(a.x - circle.center.x, a.y - circle.center.y), Math.hypot(b.x - circle.center.x, b.y - circle.center.y));
-        const tolerance = Math.max(circle.radius, farthest) * 1e-10;
-        if (distance <= circle.radius + tolerance && farthest >= circle.radius - tolerance) throw new RangeError('Profile boundaries must not intersect or touch');
-      }
-    }
-  }
-  for (let i = 0; i < circles.length; i++) {
-    for (let j = i + 1; j < circles.length; j++) {
-      const a = circles[i], b = circles[j];
-      const distance = Math.hypot(a.center.x - b.center.x, a.center.y - b.center.y);
-      const sum = a.radius + b.radius, difference = Math.abs(a.radius - b.radius), tolerance = sum * 1e-10;
-      if (distance <= sum + tolerance && distance >= difference - tolerance) throw new RangeError('Profile boundaries must not intersect or touch');
-    }
-  }
-  const profiles: Profile[] = [...circles.map(circle => ({ circle })), ...polygons.map(points => ({ points }))];
-  if (profiles.some(profile => !Number.isFinite(profileArea(profile)) || profileArea(profile) <= 0)) throw new RangeError('Profile area must be positive and finite');
+  if (!profiles.length) throw new RangeError('Extrusion needs at least one closed profile');
+  validateLoops(profiles.map(profile => profile.points));
   return profiles;
 }

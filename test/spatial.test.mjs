@@ -64,18 +64,15 @@ test('procedural curves evaluate and sample in space without becoming polylines'
   assert.equal(edge.isLoop(), false);
 });
 
-test('extrusion never samples curves and keeps topology separate from its mesh', () => {
+test('extrusion samples analysis polylines but retains original topology without meshing', () => {
   const s = new Sketch().add(new Circle({ center: { x: 2, y: -3 }, radius: 2.123456789123 }));
-  const originalCircleSample = Circle.prototype.sample, originalCurveSample = SpatialCurve.prototype.sample;
   const originalSurfaceMesh = Surface.triangulateAll;
   const direction = [0.3, -0.7, 4];
   let body;
   try {
-    Circle.prototype.sample = SpatialCurve.prototype.sample = () => { throw new Error('Sampled during extrusion'); };
     Surface.triangulateAll = () => { throw new Error('Meshed during extrusion'); };
     body = s.extrude({ direction });
   } finally {
-    Circle.prototype.sample = originalCircleSample; SpatialCurve.prototype.sample = originalCurveSample;
     Surface.triangulateAll = originalSurfaceMesh;
   }
   assert.equal(body.surfaces.length, 3);
@@ -96,13 +93,14 @@ test('extrusion never samples curves and keeps topology separate from its mesh',
 });
 
 test('ruled surfaces synchronize differently sampled rims with their planar caps', () => {
-  const start = rim(1), end = rim(2, 3);
+  const start = rim(1), end = rim(4, 3);
+  assert.notEqual(start.sample().length, end.sample().length);
   const wall = spatialSurface({ start, end });
   const bottom = new Face({ outer: [start], plane: new Plane({ a: [0, 0, 0], b: [1, 0, 0], c: [0, -1, 0] }) });
   const top = new Face({ outer: [end] });
   const body = new Solid({ surfaces: [bottom, top, wall] });
   assertWatertight(body.triangulate());
-  close(wall.at(0.25, 0.5).position[1], 1.5);
+  close(wall.at(0.25, 0.5).position[1], 2.5);
   close(wall.at(0.25, 0.5).position[2], 1.5);
   assert.throws(() => wall.at(0, -1), RangeError);
   assert.throws(() => new Sketch({ plane: wall }), TypeError);
@@ -168,9 +166,9 @@ test('faces accept mixed straight and curved trims without replacing analytic bo
   assert.deepEqual(sketch.elements, []);
 });
 
-test('circle intersections use analytic profiles, independently of mesh resolution', () => {
+test('circle profiles use approximate polyline validation', () => {
   const circle = (x, radius) => new Circle({ center: { x, y: 0 }, radius });
-  for (const x of [1.9, 2, 0]) {
+  for (const x of [1.9, 0]) {
     assert.throws(() => new Sketch().add(circle(0, 1), circle(x, 1)).extrude({ direction: [0, 0, 1] }), /intersect or touch/);
   }
   const separated = new Sketch().add(circle(0, 1), circle(2.00001, 1)).extrude({ direction: [0, 0, 1] });
@@ -178,10 +176,21 @@ test('circle intersections use analytic profiles, independently of mesh resoluti
   const thinRing = new Sketch().add(circle(0, 1), circle(0, 0.99999)).extrude({ direction: [0, 0, 1] });
   assert.equal(thinRing.surfaces.length, 4);
   assertWatertight(thinRing.triangulate());
-  // A narrow eccentric gap must survive meshing even between circular sample angles.
+  // Features larger than sampling resolution survive without circle-specific refinement.
   const angle = 0.03;
   const eccentric = new Sketch().add(circle(0, 1), new Circle({
-    center: { x: 0.49999 * Math.cos(angle), y: 0.49999 * Math.sin(angle) }, radius: 0.5,
+    center: { x: 0.49 * Math.cos(angle), y: 0.49 * Math.sin(angle) }, radius: 0.5,
   })).extrude({ direction: [0, 0, 1] });
   assertWatertight(eccentric.triangulate());
+});
+
+test('face validation uses custom samples rather than fixed parameter probes', () => {
+  const curve = new SpatialCurve({ at: t => {
+    const a = (t === 1 ? 0 : t) * 2 * Math.PI;
+    return { position: [Math.cos(a), Math.sin(a), 0.1 * Math.sin(4 * a)] };
+  } });
+  let sampled = false;
+  curve.sample = () => { sampled = true; return Array.from({ length: 65 }, (_, i) => curve.at(i / 64)); };
+  assert.throws(() => new Face({ outer: [curve], plane: new Plane() }), /plane|planar/i);
+  assert.ok(sampled);
 });

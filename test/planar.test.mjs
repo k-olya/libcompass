@@ -23,9 +23,9 @@ test('circles are normalized planar curves with exact shared loop endpoints', ()
   close(circle.at(0.25).x, 3); close(circle.at(0.25).y, 0);
   close(circle.at(0.5).x, 1); close(circle.at(0.5).y, -2);
   close(circle.at(0.75).x, 3); close(circle.at(0.75).y, -4);
-  const angle = Math.PI / 3;
-  close(circle.at(angle / (2 * Math.PI)).x, 3 + 2 * Math.cos(angle));
-  close(circle.at(angle / (2 * Math.PI)).y, -2 + 2 * Math.sin(angle));
+  const angleRAD = Math.PI / 3;
+  close(circle.at(angleRAD / (2 * Math.PI)).x, 3 + 2 * Math.cos(angleRAD));
+  close(circle.at(angleRAD / (2 * Math.PI)).y, -2 + 2 * Math.sin(angleRAD));
   for (const t of [-1, 1.01, 2 * Math.PI, NaN, Infinity]) assert.throws(() => circle.at(t), RangeError);
   const samples = circle.sample();
   assert.equal(samples[0], circle.start);
@@ -84,8 +84,8 @@ test('fromPlanarCurve lifts open curves exactly onto a copied placement frame wi
 
 test('every planar and lifted spatial loop sample repeats its closing point', () => {
   const ellipse = new PlanarCurve({ at: t => {
-    const angle = (t === 1 ? 0 : t) * 2 * Math.PI;
-    return { x: 3 * Math.cos(angle), y: 2 * Math.sin(angle) };
+    const angleRAD = (t === 1 ? 0 : t) * 2 * Math.PI;
+    return { x: 3 * Math.cos(angleRAD), y: 2 * Math.sin(angleRAD) };
   } });
   assert.notEqual(ellipse.start, ellipse.end);
   assert.ok(ellipse.isLoop());

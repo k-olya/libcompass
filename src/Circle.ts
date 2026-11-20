@@ -8,7 +8,7 @@ import { PlanarCurve } from './PlanarCurve.js';
  * The circle remains analytic through extrusion. Triangulation samples it at
  * the library-wide 0.001 chord-deviation resolution.
  * at(0) and at(1) share the point at local +X; at(0.25) is a quarter turn.
- * To evaluate an angle in radians, use at(angle / (2 * Math.PI)).
+ * To evaluate degrees, use at(angleDEG / 360); for radians use at(angleRAD / (2 * PI)).
  */
 export class Circle extends PlanarCurve {
   /** Center in sketch coordinates, retained by reference. */
@@ -27,11 +27,11 @@ export class Circle extends PlanarCurve {
       throw new RangeError('Circle radius must be positive and finite');
     }
     const at = (t: number): Point => {
-      const angle = t === 1 ? 0 : t * 2 * Math.PI;
-      return { x: center.x + radius * Math.cos(angle), y: center.y + radius * Math.sin(angle) };
+      const angleRAD = t === 1 ? 0 : t * 2 * Math.PI;
+      return { x: center.x + radius * Math.cos(angleRAD), y: center.y + radius * Math.sin(angleRAD) };
     };
     const start = at(0);
-    super({ at, start, end: start });
+    super({ at, tangent: t => [-Math.sin(t * 2 * Math.PI), Math.cos(t * 2 * Math.PI)], start, end: start });
     this.center = center;
     this.radius = radius;
   }

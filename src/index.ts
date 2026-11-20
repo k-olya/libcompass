@@ -15,6 +15,7 @@ export { TransformMat4, transformMat4Node } from './TransformMat4.js';
 export { Transform, transform } from './Transform.js';
 export { functionalize } from './util/functionalize.js';
 export { transformMat4 } from './util/transformMat4.js';
+export { PI, radtodeg, degtorad } from './util/angles.js';
 export type { Point } from './Point.js';
 export { Line, line } from './Line.js';
 export { LineSegment, lineSegment } from './LineSegment.js';

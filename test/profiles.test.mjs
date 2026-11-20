@@ -5,7 +5,7 @@ import { Circle, LineSegment, PlanarCurve, Plane, Sketch, SpatialCurve, SpatialS
 
 const close = (actual, expected, tolerance = 1e-8) => assert.ok(Math.abs(actual - expected) < tolerance, `${actual} != ${expected}`);
 const ellipse = (rx, ry, x = 0, clockwise = false) => new PlanarCurve({
-  at: t => { const a = (t === 1 ? 0 : t) * (clockwise ? -2 : 2) * Math.PI; return { x: x + rx * Math.cos(a), y: ry * Math.sin(a) }; },
+  at: t => { const angleRAD = (t === 1 ? 0 : t) * (clockwise ? -2 : 2) * Math.PI; return { x: x + rx * Math.cos(angleRAD), y: ry * Math.sin(angleRAD) }; },
 });
 function checkMesh(body, expectedVolume) {
   const positions = body.triangulate(), edges = new Map();
@@ -110,7 +110,7 @@ test('polyline analysis rejects crossings, self-intersections, and open profiles
     assert.throws(() => new Sketch().add(ellipse(1, 2), ellipse(1, 2, offset)).extrude({ length: 1 }), RangeError);
   }
   checkMesh(new Sketch().add(ellipse(1, 2), ellipse(1, 2, 2.001)).extrude({ length: 1 }), 4 * Math.PI);
-  const eight = new PlanarCurve({ at: t => { const a = (t === 1 ? 0 : t) * 2 * Math.PI; return { x: Math.sin(a), y: Math.sin(2 * a) }; } });
+  const eight = new PlanarCurve({ at: t => { const angleRAD = (t === 1 ? 0 : t) * 2 * Math.PI; return { x: Math.sin(angleRAD), y: Math.sin(2 * angleRAD) }; } });
   assert.throws(() => new Sketch().add(eight).extrude({ length: 1 }), RangeError);
   const open = new PlanarCurve({ at: t => ({ x: t, y: t * t }) });
   assert.throws(() => new Sketch().add(open).extrude({ length: 1 }), /closed/);
@@ -129,9 +129,9 @@ test('oscillating curves can override only sample through analysis, lifting, and
   class OscillatingCurve extends PlanarCurve {
     constructor() {
       super({ at: t => {
-        const angle = (t === 1 ? 0 : t) * 2 * Math.PI;
-        const radius = 0.02 + 0.005 * Math.sin(16 * angle);
-        return { x: radius * Math.cos(angle), y: radius * Math.sin(angle) };
+        const angleRAD = (t === 1 ? 0 : t) * 2 * Math.PI;
+        const radius = 0.02 + 0.005 * Math.sin(16 * angleRAD);
+        return { x: radius * Math.cos(angleRAD), y: radius * Math.sin(angleRAD) };
       } });
     }
     sample() { calls++; return Array.from({ length: 257 }, (_, i) => this.at(i / 256)); }

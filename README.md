@@ -53,7 +53,7 @@ Points and infinite lines are construction geometry and do not create boundaries
 | `Vertex` — `{ position: [x, y, z] }` | An interface for a shared world-space vertex. |
 | `new Line({ point, direction })` | An infinite line with a `ReadonlyVec2` direction; `at(t)` returns `point + t * direction`. |
 | `new LineSegment({ start, end })` | Two endpoints; `at(0)` and `at(1)` return their coordinates. |
-| `new PlanarCurve({ at, start, end })` | An exact local XY curve on [0, 1], with optional shared endpoints. |
+| `new PlanarCurve({ at, tangent, start, end })` | An exact local XY curve on [0, 1], with optional tangent evaluator and shared endpoints. |
 | `new Circle({ center, radius })` | An analytic `PlanarCurve`; `at(t)` traces one counterclockwise turn on [0, 1]. |
 | `new Plane({ a, b, c })` | Three noncollinear world points, each a `Vertex` or `ReadonlyVec3`. Defaults to XY. |
 | `new Sketch({ plane })` | Local 2D geometry on a world-space plane; `add(...elements)` returns the sketch. |
@@ -61,19 +61,49 @@ Points and infinite lines are construction geometry and do not create boundaries
 | `new Face({ outer, holes, plane })` | A planar surface with closed loops of edges and spatial curves; holes and an oriented plane are optional. |
 | `new Solid({ surfaces })` | A memoized scene node retaining shared analytic topology. |
 | `new SpatialCurve({ at, start, end })` | A world-space parametric curve on [0, 1], with optional shared endpoint objects. |
-| `new SpatialSurface({ start, end, sides, reversed })` | An exact ruled patch between corresponding open or closed boundaries. |
+| `new SpatialSurface({ start, end, sides, reversed })` | An exact ruled patch between corresponding boundaries, or from a boundary to an apex vertex. |
 | `new TransformMat4({ matrix })` | A memoized scene node applying a gl-matrix transformation. |
 
 Constructors with arguments take a single named options object. `Plane` and
 `Sketch` allow omitted options for their defaults; zero-argument constructors
 such as `Node`, `Memo`, and `Transform` remain unchanged. Extrusion also takes
-named options: `extrude({ sketch, length, axis? })` or
-`sketch.extrude({ length, axis? })`. `axis` is a finite, nonzero world-space vector,
+named options: `extrude({ sketch, length, axis?, angle? })` or
+`sketch.extrude({ length, axis?, angle? })`. `axis` is a finite, nonzero world-space vector,
 normalized internally without modifying it, and defaults to the sketch plane
 normal. Displacement is `normalize(axis) * length`; negative
 lengths extrude in the opposite direction. Length must be finite and nonzero,
 and the axis must leave the sketch plane. Extrusion has no tessellation options.
 Utilities such as `functionalize` and `transformMat4` keep positional arguments.
+
+`angle` is a wall draft angle in degrees, defaulting to zero, strictly between
+`-90` and `90`. Positive angles expand material and shrink
+holes; negative angles contract material and grow holes. This sign convention
+also applies to negative lengths. A normal-axis extrusion offsets each wall by
+`abs(length) * tan(degtorad(angleDEG))`, rather than scaling the whole profile. Oblique axes
+also keep a constant wall angle, provided the angle permits forward-moving walls.
+
+```ts
+import { circle, sketch } from 'libcompass';
+
+const coneSketch = sketch().add(circle({ center: { x: 0, y: 0 }, radius: 5 }));
+const frustum = coneSketch.extrude({ length: 2, angle: -45 });
+const cone = coneSketch.extrude({ length: 20, angle: -45 });
+// The cone stops at height 5: a shared apex replaces the upper rim and cap.
+```
+
+The whole extrusion stops at the first boundary that converges to a point, so
+disconnected profiles share the clamped length. Polygon corners remain sharp;
+smooth curved joins are supported. Sharp joins involving curves, offset folds,
+intersecting contours, or a collapse to a line need a future offset-trimming
+operation and currently throw a descriptive `RangeError`.
+
+Draft uses the generic `PlanarCurve.tangent(t)` unit tangent. By default it uses
+finite differences of `at(t)`; pass an optional `tangent: t => [dx, dy]` evaluator
+or override the method for exact derivatives. `Circle` provides its exact tangent.
+The extrusion operation has no curve-type special cases. Source `sample()`
+overrides are respected; default sampling can accept `{ resolution }` when draft
+needs finer polylines. Generated curve equations remain separate from those
+temporary analysis and tessellation samples.
 
 CAD operation functions perform geometric work on math objects such as sketches,
 solids, and curves. They live in `src/operations/`; for example, `extrude` is
@@ -86,6 +116,15 @@ methods, while `transformMat4` works with matrices and packed coordinate arrays.
 Private geometry implementation helpers live in `src/internal/` and are not
 exported from the root API. The docs browser groups public entries into Classes,
 Shorthands, Operations, Defaults, and Util.
+
+Public modeling angles use degrees: `extrude` and `Sketch.extrude` take `angle`,
+and `Transform.rotation` stores XYZ Euler angles. Curve `at(t)` parameters stay
+normalized to [0, 1]. Internal angular values use `DEG` or `RAD` suffixes.
+
+Angle helpers are exported from the root and `libcompass/util/angles`: `PI`
+equals `Math.PI`, `radtodeg(angleRAD)` converts to degrees, and `degtorad(angleDEG)`
+converts to radians. Conversions preserve negative angles and multiple turns;
+they do not wrap or clamp. For example, `degtorad(45)` equals `PI / 4`.
 
 Every concrete class also has a lowercase constructor shorthand, exported from the root
 and its class module: `node`, `memo`, `transform`, `transformMat4Node`, `line`,
@@ -125,7 +164,8 @@ loops, and two topological vertices, regardless of triangulation density.
 `PlanarCurve` evaluates local XY `Point` objects, while `SpatialCurve` evaluates
 world-space `Vertex` objects. `Circle` extends `PlanarCurve`: `at(0)` is local +X,
 `at(0.25)` is a quarter turn, and `at(1)` returns the same closing point as `at(0)`.
-For angles in radians, use `circle.at(angle / (2 * Math.PI))`. Parameters outside
+For angles in degrees, use `circle.at(angleDEG / 360)`; for radians, use
+`circle.at(angleRAD / (2 * PI))`. Parameters outside
 [0, 1] are rejected. `planarCurve({ at: t => ({ x: t, y: t * t }) })` creates a
 general procedural planar curve without tessellation.
 
@@ -251,7 +291,7 @@ numbers. Changing mesh density never changes the stored mathematical geometry.
 
 Adaptive midpoint probes can miss oscillations between probes; they do not
 provide a certified global error bound for arbitrary evaluators. `SpatialSurface`
-currently represents ruled patches, including cylindrical and oblique extrusion
+currently represents ruled patches, including cylindrical, conical, and oblique extrusion
 walls; arbitrary doubly curved surfaces, sketch booleans, and constraints remain
 outside the current API. Invalid trim intersections or triangulations fail
 explicitly rather than producing partial meshes.
@@ -287,7 +327,7 @@ Direct modules are `libcompass/defaults/axes` and `libcompass/defaults/planes`.
 `Node` groups child nodes, and `Solid` extends `Memo`, which extends `Node`.
 `Memo` caches until `refresh()`;
 geometry-producing node subclasses override `triangulateUncached()`. `Transform`
-exposes XYZ `position`, `rotation` (radians, XYZ Euler order), and `scale` objects.
+exposes XYZ `position`, `rotation` (degrees, XYZ Euler order), and `scale` objects.
 Sketches, planes, vertices, edges, curves, and surfaces remain independent math objects.
 
 Use `node.add(first, second)` to append children and `node.remove(first, second)`

@@ -74,17 +74,22 @@ export class Sketch {
    * modifying it; defaults to this sketch's plane normal and must leave the plane.
    * @param options.length - Finite, nonzero length; negative values extrude
    * opposite to the axis. Displacement is `normalize(axis) * length`.
+   * @param options.angle - Draft angle in degrees; defaults to zero. Positive
+   * expands material and negative contracts it. Length clamps at an apex.
+   * Sharp curved joins and intersecting offsets require trimming and are unsupported.
    * @returns An analytic solid snapshot with shared boundaries and surfaces.
    * @throws {@link RangeError} if the axis, length, or profiles are invalid.
    * @see {@link extrude}
    */
-  extrude({ axis, length }: {
+  extrude({ axis, length, angle: angleDEG }: {
     /** World-space direction, normalized internally; defaults to this sketch's plane normal. */
     axis?: ReadonlyVec3;
     /** Finite, nonzero signed length; negative values reverse the extrusion. */
     length: number;
+    /** Draft angle in degrees; positive expands, negative contracts; defaults to zero. */
+    angle?: number;
   }): Solid {
-    return extrude({ sketch: this, axis, length });
+    return extrude({ sketch: this, axis, length, angle: angleDEG });
   }
 }
 

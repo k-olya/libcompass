@@ -34,10 +34,10 @@ test('defaults to identity with independent XYZ properties for each instance', (
   assert.deepEqual(node.triangulate(), child.triangulate());
 });
 
-test('composes translation, XYZ Euler rotation in radians, and nonuniform scale', () => {
+test('composes translation, XYZ Euler rotation in degrees, and nonuniform scale', () => {
   const node = new Transform();
   node.position = { x: 10, y: 20, z: 30 };
-  node.rotation = { x: Math.PI / 2, y: Math.PI / 2, z: Math.PI / 2 };
+  node.rotation = { x: 90, y: 90, z: 90 };
   node.scale = { x: 2, y: 3, z: 4 };
   node.children.push(new Triangle());
 
@@ -55,7 +55,7 @@ test('caches results until refresh and rebuilds without changing child geometry'
   assertPositions(first, [11, 0, 0, 10, 1, 0, 10, 0, 1]);
 
   node.position.x = 20;
-  node.rotation.z = Math.PI / 2;
+  node.rotation.z = 90;
   node.scale.y = -2;
   node.scale.z = 0;
   assert.equal(node.triangulate(), first);

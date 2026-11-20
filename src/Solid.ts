@@ -7,7 +7,7 @@ import type { Vertex } from './Vertex.js';
  * A memoized scene node retaining exact planar and spatial surfaces.
  *
  * @remarks
- * Surfaces share boundary and endpoint objects. Tessellation never changes
+ * Surfaces share boundaries, endpoints, and singular apex vertices. Tessellation never changes
  * this topology. Shell closure and manifoldness are not validated by this
  * constructor; extrusion builds closed, consistently oriented solids.
  * Triangulation includes own surfaces followed by child nodes and is cached
@@ -26,7 +26,7 @@ export class Solid extends Memo {
     super();
     this.surfaces = [...surfaces];
     this.boundaries = [...new Set(surfaces.flatMap(surface => surface.boundaries))];
-    this.vertices = [...new Set(this.boundaries.flatMap(boundary => [boundary.start, boundary.end]))];
+    this.vertices = [...new Set(surfaces.flatMap(surface => surface.vertices))];
   }
 
   protected override triangulateUncached(): Float32Array {

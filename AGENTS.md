@@ -29,6 +29,23 @@
   nonzero `axis` defaulting to the sketch plane normal. Normalize the axis
   internally without mutating it; displacement is `normalize(axis) * length`.
   Negative lengths reverse extrusion. The axis must leave the sketch plane.
+- Public modeling angles use degrees. Public names such as `angle` and
+  `rotation` may omit the `DEG` suffix; all internal angular variables and
+  parameters must end in `DEG` or `RAD`, including aliases of public properties.
+  Convert degrees to radians at trigonometric or matrix API boundaries. Curve
+  parameters `t` remain normalized to [0, 1]; unit vectors and trigonometric
+  ratios are not angles. Keep mathematical constants such as `PI` unchanged.
+- Extrusion's optional `angle` is a constant wall draft angle in degrees,
+  strictly between -90 and 90,
+  defaulting to zero. Positive expands material (shrinking holes), negative
+  contracts it (growing holes), independently of the length sign. Clamp the
+  whole extrusion at the first profile's point convergence and retain a shared
+  apex vertex, without a zero-area cap or degenerate triangles. Report other
+  offset intersections, folds, and sharp curved joins requiring trimming.
+- Keep drafting independent of curve types. Use `PlanarCurve.tangent(t)`;
+  its default uses finite differences and exact evaluators or overrides are
+  allowed. Curve sampling overrides remain authoritative for draft analysis
+  and tessellation; never replace a curve's equations with its polyline.
 - Preserve shared vertex and edge identities in solids so topology can be reused
   for further operations. Curves remain mathematical through extrusion. Profile
   analysis may use temporary sampled polylines; triangulation generates the

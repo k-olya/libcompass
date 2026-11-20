@@ -112,8 +112,8 @@ test('ruled surfaces synchronize differently sampled rims with their planar caps
 
 test('general parametric ellipses lift into a watertight solid without circle metadata', () => {
   const ellipse = { at(t) {
-    const angle = (t === 1 ? 0 : t) * 2 * Math.PI;
-    return { x: 3 * Math.cos(angle), y: 2 * Math.sin(angle) };
+    const angleRAD = (t === 1 ? 0 : t) * 2 * Math.PI;
+    return { x: 3 * Math.cos(angleRAD), y: 2 * Math.sin(angleRAD) };
   } };
   const start = SpatialCurve.fromPlanarCurve({ curve: ellipse });
   const end = SpatialCurve.fromPlanarCurve({ curve: ellipse, plane: new Plane({ a: [0, 0, 4], b: [1, 0, 4], c: [0, 1, 4] }) });
@@ -179,17 +179,17 @@ test('circle profiles use approximate polyline validation', () => {
   assert.equal(thinRing.surfaces.length, 4);
   assertWatertight(thinRing.triangulate());
   // Features larger than sampling resolution survive without circle-specific refinement.
-  const angle = 0.03;
+  const angleRAD = 0.03;
   const eccentric = new Sketch().add(circle(0, 1), new Circle({
-    center: { x: 0.49 * Math.cos(angle), y: 0.49 * Math.sin(angle) }, radius: 0.5,
+    center: { x: 0.49 * Math.cos(angleRAD), y: 0.49 * Math.sin(angleRAD) }, radius: 0.5,
   })).extrude({ length: 1 });
   assertWatertight(eccentric.triangulate());
 });
 
 test('face validation uses custom samples rather than fixed parameter probes', () => {
   const curve = new SpatialCurve({ at: t => {
-    const a = (t === 1 ? 0 : t) * 2 * Math.PI;
-    return { position: [Math.cos(a), Math.sin(a), 0.1 * Math.sin(4 * a)] };
+    const angleRAD = (t === 1 ? 0 : t) * 2 * Math.PI;
+    return { position: [Math.cos(angleRAD), Math.sin(angleRAD), 0.1 * Math.sin(4 * angleRAD)] };
   } });
   let sampled = false;
   curve.sample = () => { sampled = true; return Array.from({ length: 65 }, (_, i) => curve.at(i / 64)); };

@@ -259,8 +259,8 @@ test('varied concave profiles with holes remain watertight with the expected vol
   for (let sample = 0; sample < 12; sample++) {
     const count = 7 + sample;
     const loop = Array.from({ length: count }, (_, i) => {
-      const angle = 2 * Math.PI * i / count, radius = 2 + random() * 2;
-      return [radius * Math.cos(angle), radius * Math.sin(angle)];
+      const angleRAD = 2 * Math.PI * i / count, radius = 2 + random() * 2;
+      return [radius * Math.cos(angleRAD), radius * Math.sin(angleRAD)];
     });
     const sketch = polygon(new Sketch(), loop);
     rectangle(sketch, -0.25, -0.25, 0.5, 0.5);

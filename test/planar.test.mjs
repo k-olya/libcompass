@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Circle, PlanarCurve, Plane, Sketch, SpatialCurve, TRIANGULATION_RESOLUTION, planarCurve } from 'libcompass';
+import { setTriangulationResolution } from 'libcompass';
+
+// Precision regressions run at the finest supported setting.
+setTriangulationResolution(0.001);
 
 const close = (actual, expected, tolerance = 1e-11) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected}`);
 

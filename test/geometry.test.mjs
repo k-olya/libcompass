@@ -6,6 +6,10 @@ import {
 } from 'libcompass';
 import { extrude as operationExtrude } from 'libcompass/operations/extrude';
 import { extrude as legacyExtrude } from 'libcompass/extrude';
+import { setTriangulationResolution } from 'libcompass';
+
+// Precision regressions run at the finest supported setting.
+setTriangulationResolution(0.001);
 
 assert.equal(operationExtrude, extrude);
 assert.equal(legacyExtrude, extrude);

@@ -18,8 +18,15 @@ import { validateSweepMesh } from '../internal/validateSweepMesh.js';
 /** A sweep seeds its generic surface sampler from both source curve samplers. */
 class SweptSurface extends SpatialSurface {
   private sampled?: SurfaceGrid;
+  private sampledResolution?: number;
   constructor(options: ConstructorParameters<typeof SpatialSurface>[0], private readonly u: readonly number[], private readonly v: readonly number[]) { super(options); }
-  override sample(): SurfaceGrid { return this.sampled ??= sampleSurface(this, this.u, this.v); }
+  override sample(): SurfaceGrid {
+    if (!this.sampled || this.sampledResolution !== TRIANGULATION_RESOLUTION) {
+      this.sampled = sampleSurface(this, this.u, this.v);
+      this.sampledResolution = TRIANGULATION_RESOLUTION;
+    }
+    return this.sampled;
+  }
 }
 
 /**

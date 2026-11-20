@@ -14,11 +14,15 @@ export function curveParameters(curve: ParametricCurve, resolution = TRIANGULATI
   if (existing) return existing;
   // ponytail: midpoint probes can miss oscillations; stronger bounds belong in a specialized sampler.
   const parameters = [0];
+  const start = coordinates(curve.at(0)), end = coordinates(curve.at(1));
+  const closed = start.every((value, i) => value === end[i]);
   const refine = (a: number, b: number, depth: number): void => {
     const start = coordinates(curve.at(a)), end = coordinates(curve.at(b));
     const middle = coordinates(curve.at((a + b) / 2));
     const error = Math.hypot(...middle.map((value, i) => value - (start[i] + end[i]) / 2));
-    if (error > resolution) {
+    // Keep four segments in a closed curve even at coarse tolerances, so
+    // its analysis polyline does not collapse to a back-and-forth line.
+    if (error > resolution || (closed && depth === 0)) {
       if (depth >= 20) throw new RangeError('Curve cannot be sampled at the triangulation resolution');
       const middle = (a + b) / 2;
       refine(a, middle, depth + 1); refine(middle, b, depth + 1);

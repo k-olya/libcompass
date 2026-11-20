@@ -26,7 +26,7 @@ import { degtorad } from '../util/angles.js';
  *
  * The placement is copied; treat source curve evaluators as immutable. Boundary
  * and vertex identities are shared. Only triangulation introduces facets,
- * at the library-wide resolution of 0.001.
+ * at the configured library-wide triangulation resolution.
  *
  * @param options - Sketch, signed length, and optional world-space axis.
  * @param options.sketch - Closed profiles of planar curves and line segments.

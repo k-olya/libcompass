@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { vec3 } from 'gl-matrix';
 import { Circle, Edge, Face, PlanarCurve, Plane, Sketch, Solid, SpatialCurve, SpatialSurface, RuledSurface, Surface, TRIANGULATION_RESOLUTION, spatialCurve, ruledSurface } from 'libcompass';
+import { setTriangulationResolution } from 'libcompass';
+
+// Precision regressions run at the finest supported setting.
+setTriangulationResolution(0.001);
 
 const close = (actual, expected, tolerance = 1e-11) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected}`);
 const rim = (radius, z = 0) => SpatialCurve.fromPlanarCurve({ curve: new Circle({ center: { x: 0, y: 0 }, radius }), plane: new Plane({ a: [0, 0, z], b: [1, 0, z], c: [0, 1, z] }) });

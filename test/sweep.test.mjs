@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { vec3 } from 'gl-matrix';
 import { Circle, Face, LineSegment, Plane, PlanarCurve, Sketch, SpatialCurve, SpatialSurface, circle, extrudeAlongCurve, sketch, spatialCurve } from 'libcompass';
+import { setTriangulationResolution } from 'libcompass';
+
+// Precision regressions run at the finest supported setting.
+setTriangulationResolution(0.001);
 
 const close = (actual, expected, tolerance = 1e-6) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected}`);
 const disk = radius => sketch().add(circle({ center: { x: 0, y: 0 }, radius }));

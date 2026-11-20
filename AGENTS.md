@@ -42,6 +42,10 @@
   whole extrusion at the first profile's point convergence and retain a shared
   apex vertex, without a zero-area cap or degenerate triangles. Report other
   offset intersections, folds, and sharp curved joins requiring trimming.
+- Change resolution through `setTriangulationResolution`; never snapshot the
+  mutable export in long-lived sampling defaults. Sampling caches must be keyed
+  by resolution. Changing it does not invalidate memo nodes: rerun operations
+  for a new model, as the app does on resolution edits.
 - Keep drafting independent of curve types. Use `PlanarCurve.tangent(t)`;
   its default uses finite differences and exact evaluators or overrides are
   allowed. Curve sampling overrides remain authoritative for draft analysis
@@ -65,7 +69,7 @@
 - Preserve shared vertex and edge identities in solids so topology can be reused
   for further operations. Curves remain mathematical through extrusion. Profile
   analysis may use temporary sampled polylines; triangulation generates the
-  output facets at a library-wide target deviation of 0.001.
+  output facets at the configured library-wide target deviation.
   Solids contain planar faces and spatial surfaces, sharing exact edge and
   spatial-curve boundaries. Only planar faces can supply sketch planes.
 - Use the same default sampling rule for every planar or spatial curve without
@@ -73,8 +77,10 @@
   interval `[a, b]`, compare `at((a + b) / 2)` with the midpoint of the line
   segment joining `at(a)` and `at(b)`. Bisect the interval and recursively test
   both halves until this Euclidean distance is less than or equal to
-  `TRIANGULATION_RESOLUTION` (currently `0.001`). Resolution limits midpoint
-  deviation, not segment length.
+  `TRIANGULATION_RESOLUTION` (default `0.1`, configurable from `0.001` to `1`
+  through `setTriangulationResolution`). Closed curves retain at least four
+  segments so coarse settings do not collapse their profile polylines. Resolution
+  limits midpoint deviation, not segment length.
 - Curve classes may override `.sample()`, for example to account for oscillations
   that midpoint probes can miss. Every operation needing curve samples must
   consume the curve's `.sample()` result, respecting overrides rather than

@@ -35,6 +35,6 @@ export { SpatialCurve, spatialCurve } from './SpatialCurve.js';
 export { Surface } from './Surface.js';
 export { RuledSurface, ruledSurface } from './RuledSurface.js';
 export { SpatialSurface, spatialSurface, type SurfaceSides } from './SpatialSurface.js';
-export { TRIANGULATION_RESOLUTION } from './triangulation.js';
+export { TRIANGULATION_RESOLUTION, setTriangulationResolution } from './triangulation.js';
 export { X, Y, Z } from './defaults/axes.js';
 export { XY, ZX, YZ } from './defaults/planes.js';

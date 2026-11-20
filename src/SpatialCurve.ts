@@ -139,7 +139,7 @@ export class SpatialCurve implements SpatialBoundary {
   }
 
   /**
-   * Sample a polyline at the library's 0.001 chord-deviation resolution.
+   * Sample a polyline at the library's configured chord-deviation resolution.
    * @param options - Optional positive resolution; sweeps may request finer source samples.
    *
    * @remarks

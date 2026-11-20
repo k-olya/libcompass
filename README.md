@@ -325,8 +325,12 @@ even-odd nesting use sampled polylines, without shape checks in profile assembly
 edges. Straight extrusion does not triangulate during solid construction;
 sweep construction additionally checks a temporary validation mesh.
 
-`TRIANGULATION_RESOLUTION` is currently fixed library-wide at `0.001` model units:
-the target midpoint-to-chord deviation. Triangulation samples shared boundaries
+`TRIANGULATION_RESOLUTION` is the library-wide midpoint-to-chord deviation in
+model units. It defaults to `0.1`; call `setTriangulationResolution(value)` with
+a finite value from `0.001` to `1` inclusive to change it. Smaller values produce
+more triangles. Rerun modeling operations to rebuild the model at the new setting;
+existing memoized nodes retain their caches. Closed curves keep at least four
+segments even at coarse settings, so profile polylines remain nondegenerate. Triangulation samples shared boundaries
 together and uses Earcut for planar caps.
 Collinear boundary vertices are preserved to prevent cracks. Only the final
 triangle output uses `Float32Array`; analytic coordinate evaluation uses JavaScript

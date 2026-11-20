@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { vec3 } from 'gl-matrix';
 import { Circle, LineSegment, PlanarCurve, Plane, Sketch, SpatialCurve, SpatialSurface } from 'libcompass';
+import { setTriangulationResolution } from 'libcompass';
+
+// Precision regressions run at the finest supported setting.
+setTriangulationResolution(0.001);
 
 const close = (actual, expected, tolerance = 1e-8) => assert.ok(Math.abs(actual - expected) < tolerance, `${actual} != ${expected}`);
 const ellipse = (rx, ry, x = 0, clockwise = false) => new PlanarCurve({

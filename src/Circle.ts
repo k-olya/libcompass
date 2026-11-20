@@ -6,7 +6,7 @@ import { PlanarCurve } from './PlanarCurve.js';
  *
  * @remarks
  * The circle remains analytic through extrusion. Triangulation samples it at
- * the library-wide 0.001 chord-deviation resolution.
+ * the configured library-wide chord-deviation resolution.
  * at(0) and at(1) share the point at local +X; at(0.25) is a quarter turn.
  * To evaluate degrees, use at(angleDEG / 360); for radians use at(angleRAD / (2 * PI)).
  */

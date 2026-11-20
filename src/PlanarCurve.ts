@@ -122,7 +122,7 @@ export class PlanarCurve implements PlanarLoop {
   }
 
   /**
-   * Sample local points at the library's 0.001 chord-deviation resolution.
+   * Sample local points at the library's configured chord-deviation resolution.
    * @param options - Optional resolution; draft may request finer source samples.
    *
    * @remarks

@@ -18,7 +18,7 @@ export abstract class Surface {
   /** Unique topological endpoints; tessellation vertices are never added here. */
   get vertices(): readonly Vertex[] { return [...new Set(this.boundaries.flatMap(boundary => [boundary.start, boundary.end]))]; }
 
-  /** Tessellate this surface at the library-wide 0.001 resolution. */
+  /** Tessellate this surface at the configured library-wide resolution. */
   triangulate(): Float32Array { return Surface.triangulateAll([this]); }
 
   /**

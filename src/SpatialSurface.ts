@@ -4,7 +4,7 @@ import type { SpatialBoundary } from './SpatialBoundary.js';
 import { Surface } from './Surface.js';
 import type { Vertex } from './Vertex.js';
 import { validateVertex } from './Vertex.js';
-import type { Tessellation } from './util/Tessellation.js';
+import type { Tessellation } from './internal/Tessellation.js';
 
 /**
  * An exact ruled surface between two equally parameterized spatial boundaries.

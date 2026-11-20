@@ -5,7 +5,7 @@ import type { LineSegment } from './LineSegment.js';
 import { Plane } from './Plane.js';
 import type { PlanarCurve } from './PlanarCurve.js';
 import type { Point } from './Point.js';
-import { extrude } from './extrude.js';
+import { extrude } from './operations/extrude.js';
 import { Solid } from './Solid.js';
 
 /** A drawable sketch entity; points and infinite lines are construction geometry. */

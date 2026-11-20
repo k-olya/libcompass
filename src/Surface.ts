@@ -1,7 +1,7 @@
 import type { SpatialBoundary } from './SpatialBoundary.js';
 import type { Vertex } from './Vertex.js';
-import { orientLoop } from './util/boundaryLoops.js';
-import { Tessellation } from './util/Tessellation.js';
+import { orientLoop } from './internal/boundaryLoops.js';
+import { Tessellation } from './internal/Tessellation.js';
 
 /** Shared topological base for planar faces and curved spatial surfaces. */
 export abstract class Surface {

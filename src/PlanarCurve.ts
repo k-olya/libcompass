@@ -1,8 +1,8 @@
 import { validatePoint, type Point } from './Point.js';
-import { curveParameters } from './util/curveSampling.js';
+import { curveParameters } from './internal/curveSampling.js';
 import { TRIANGULATION_RESOLUTION } from './triangulation.js';
 import type { PlanarLoop } from './PlanarLoop.js';
-import { containsInterior, signedArea } from './util/polygon.js';
+import { containsInterior, signedArea } from './internal/polygon.js';
 
 /**
  * An exact curve in local XY coordinates with a normalized [0, 1] parameter.

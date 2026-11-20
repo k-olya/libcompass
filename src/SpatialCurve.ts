@@ -2,7 +2,7 @@ import { Plane } from './Plane.js';
 import { PlanarCurve } from './PlanarCurve.js';
 import type { SpatialBoundary } from './SpatialBoundary.js';
 import { validateVertex, type Vertex } from './Vertex.js';
-import { curveParameters } from './util/curveSampling.js';
+import { curveParameters } from './internal/curveSampling.js';
 import { TRIANGULATION_RESOLUTION } from './triangulation.js';
 
 /**

@@ -27,7 +27,7 @@ export type { Vertex } from './Vertex.js';
 export { Edge, edge } from './Edge.js';
 export { Face, face } from './Face.js';
 export { Solid, solid } from './Solid.js';
-export { extrude } from './extrude.js';
+export { extrude } from './operations/extrude.js';
 export type { SpatialBoundary } from './SpatialBoundary.js';
 export { SpatialCurve, spatialCurve } from './SpatialCurve.js';
 export { Surface } from './Surface.js';

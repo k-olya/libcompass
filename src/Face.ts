@@ -3,9 +3,9 @@ import { Plane } from './Plane.js';
 import type { SpatialBoundary } from './SpatialBoundary.js';
 import { Surface } from './Surface.js';
 import type { Vertex } from './Vertex.js';
-import { orientLoop, sampleLoop } from './util/boundaryLoops.js';
-import { signedArea, triangulatePolygon, validateLoops } from './util/polygon.js';
-import type { Tessellation } from './util/Tessellation.js';
+import { orientLoop, sampleLoop } from './internal/boundaryLoops.js';
+import { signedArea, triangulatePolygon, validateLoops } from './internal/polygon.js';
+import type { Tessellation } from './internal/Tessellation.js';
 
 /**
  * A planar surface trimmed by exact edges and spatial curves.

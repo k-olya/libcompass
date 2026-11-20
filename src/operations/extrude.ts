@@ -1,15 +1,15 @@
 import { vec3, type ReadonlyVec3 } from 'gl-matrix';
-import { Edge } from './Edge.js';
-import { Face } from './Face.js';
-import { Plane } from './Plane.js';
-import type { Sketch } from './Sketch.js';
-import { Solid } from './Solid.js';
-import type { SpatialBoundary } from './SpatialBoundary.js';
-import { SpatialCurve } from './SpatialCurve.js';
-import { SpatialSurface } from './SpatialSurface.js';
-import type { Surface } from './Surface.js';
-import { validateVertex } from './Vertex.js';
-import { profileAnchor, profileArea, profileContains, sketchProfiles, type Profile } from './util/profiles.js';
+import { Edge } from '../Edge.js';
+import { Face } from '../Face.js';
+import { Plane } from '../Plane.js';
+import type { Sketch } from '../Sketch.js';
+import { Solid } from '../Solid.js';
+import type { SpatialBoundary } from '../SpatialBoundary.js';
+import { SpatialCurve } from '../SpatialCurve.js';
+import { SpatialSurface } from '../SpatialSurface.js';
+import type { Surface } from '../Surface.js';
+import { validateVertex } from '../Vertex.js';
+import { profileAnchor, profileArea, profileContains, sketchProfiles, type Profile } from '../internal/profiles.js';
 
 /**
  * Extrude all filled sketch regions into exact planar and curved surfaces.

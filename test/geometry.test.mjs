@@ -3,6 +3,11 @@ import { test } from 'node:test';
 import {
   Circle, Edge, Face, Line, LineSegment, Plane, Sketch, Solid, SpatialCurve, SpatialSurface, extrude,
 } from 'libcompass';
+import { extrude as operationExtrude } from 'libcompass/operations/extrude';
+import { extrude as legacyExtrude } from 'libcompass/extrude';
+
+assert.equal(operationExtrude, extrude);
+assert.equal(legacyExtrude, extrude);
 
 const boundaries = vertices => vertices.map((start, i) => new Edge({ start, end: vertices[(i + 1) % vertices.length] }));
 

@@ -11,6 +11,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./extrude": {
+      "types": "./dist/operations/extrude.d.ts",
+      "import": "./dist/operations/extrude.js"
+    },
     "./src/*": "./src/*",
     "./*": {
       "types": "./dist/*.d.ts",

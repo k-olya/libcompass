@@ -71,6 +71,18 @@ named options: `extrude({ sketch, direction })` or
 `sketch.extrude({ direction })`. Extrusion has no tessellation options.
 Utilities such as `functionalize` and `transformMat4` keep positional arguments.
 
+CAD operation functions perform geometric work on math objects such as sketches,
+solids, and curves. They live in `src/operations/`; for example, `extrude` is
+available from the root or `libcompass/operations/extrude`. The previous
+`libcompass/extrude` import remains an alias. Constructor shorthands create math
+objects and stay beside their classes.
+
+General utilities live in `src/util/`: `functionalize` works with arbitrary
+methods, while `transformMat4` works with matrices and packed coordinate arrays.
+Private geometry implementation helpers live in `src/internal/` and are not
+exported from the root API. The docs browser groups public entries into Classes,
+Shorthands, Operations, and Util.
+
 Every concrete class also has a lowercase constructor shorthand, exported from the root
 and its class module: `node`, `memo`, `transform`, `transformMat4Node`, `line`,
 `lineSegment`, `circle`, `plane`, `sketch`, `edge`, `face`, `solid`,

@@ -72,6 +72,14 @@
   output facets at the configured library-wide target deviation.
   Solids contain planar faces and spatial surfaces, sharing exact edge and
   spatial-curve boundaries. Only planar faces can supply sketch planes.
+- Chamfer returns a new solid, retaining child node identities in a new child
+  array. Never mutate input coordinates, topology, child lists, or memo caches.
+  Boundary indices refer to the original solid; omitted or empty lists select
+  all boundaries. Setback and angle reference the first adjoining surface in
+  solid.surfaces order. Curved trims retain the source evaluator through a
+  TrimmedSurface chart and share exact rails with the bevel. Respect source
+  sampling overrides and reject unresolved intersections, folds and unsupported
+  curved corners rather than falling back to a mesh-only solid.
 - Use the same default sampling rule for every planar or spatial curve without
   a sampling override: start with normalized parameters `[0, 0.5, 1]`. For each
   interval `[a, b]`, compare `at((a + b) / 2)` with the midpoint of the line

@@ -63,6 +63,7 @@ Points and infinite lines are construction geometry and do not create boundaries
 | `new SpatialCurve({ at, start, end })` | A world-space parametric curve on [0, 1], with optional shared endpoint objects. |
 | `new SpatialSurface({ at, boundaryLoops, sides, periodicU, periodicV, reversed })` | A general parametric surface on [0, 1]², with optional periodic directions. |
 | `new RuledSurface({ start, end, sides, reversed })` | An exact ruled patch between corresponding boundaries, or from a boundary to an apex vertex. |
+| `new TrimmedSurface({ surface, at, boundaryLoops, sides })` | A mathematical parameter chart retaining a region of an existing spatial surface. |
 | `new TransformMat4({ matrix })` | A memoized scene node applying a gl-matrix transformation. |
 
 Constructors with arguments take a single named options object. `Plane` and
@@ -143,6 +144,41 @@ return `{ t, point }` records by calling `.sample()`, including overrides.
 Overrides used by drafts or sweeps must build their samples with `this.at(t)` so parameter
 metadata survives; unavailable or unordered parameters throw instead of guessing
 from vertex indices. Ordinary `.sample()` still returns points or vertices.
+
+`chamfer({ solid, length = 0.5, angle = 45, boundaries = [] })` returns a new
+beveled solid. The instance form is `solid.chamfer({ length, angle, boundaries })`,
+or simply `solid.chamfer()` for the defaults. `boundaries` contains indices from the input `solid.boundaries`;
+omitting it or passing `[]` affects every boundary. Duplicate indices are applied
+once. Length is the positive setback on the first adjoining surface in
+`solid.surfaces` order (a chord distance on curved surfaces), and angle is in
+degrees from that surface toward the material, strictly between 0 and 90.
+On a right-angle edge, the other setback is `length * tan(degtorad(angle))`.
+
+```ts
+const beveled = chamfer({ solid: part, boundaries: [0, 2], length: 0.5, angle: 45 });
+scene.add(beveled); // The original part and its cached mesh are unchanged.
+```
+
+Convex straight edges between planar faces use analytic cutting planes, including
+intersections where several bevels meet. Smooth closed curved rims are evaluated
+generically: the adjoining mathematical surfaces are trimmed and joined by a
+ruled bevel, including outer rims and holes on drafted extrusions. No circle
+equations or faceted replacement solids are used. Input surfaces, boundaries,
+vertices and coordinate arrays are not modified; child nodes are retained in a
+new child array. Open curved corners, nonconvex straight corners, overlaps with
+holes or unrelated curved surfaces, folds and unresolved intersections throw.
+Validation uses a temporary mesh at the current resolution, with the same
+numerical limitations as sweep validation. A smooth solid with no physical
+boundaries, such as a torus, returns a new solid with its existing surfaces.
+
+`TrimmedSurface` and `trimmedSurface` retain the source `SpatialSurface` and a
+chart mapping [0, 1]² into its retained parameter region. Curved chart sides and
+periodic annuli are supported, with shared physical boundaries and no seam edges.
+`parameters(u, v)` returns the source UV coordinates; `at(u, v)` evaluates the
+source there. Regions that cannot be represented by one regular chart need
+multiple patches. Trimming preserves the original surface equations and only
+tessellation produces facets. `SpatialSurface.sides` now exposes its physical
+parameter-side metadata, including for `RuledSurface`.
 
 CAD operation functions perform geometric work on math objects such as sketches,
 solids, and curves. They live in `src/operations/`; for example, `extrude` is

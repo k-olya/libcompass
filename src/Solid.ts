@@ -1,4 +1,5 @@
 import { Memo } from './Memo.js';
+import { chamfer } from './operations/chamfer.js';
 import type { SpatialBoundary } from './SpatialBoundary.js';
 import { Surface } from './Surface.js';
 import type { Vertex } from './Vertex.js';
@@ -28,6 +29,27 @@ export class Solid extends Memo {
     this.boundaries = [...new Set(surfaces.flatMap(surface => surface.boundaries))];
     this.vertices = [...new Set(surfaces.flatMap(surface => surface.vertices))];
   }
+
+  /**
+   * Return a new chamfered solid, leaving this solid and its cached mesh unchanged.
+   * @param options - Setback, angle, and indices in this solid's boundaries array.
+   * @param options.length - Positive setback on the first adjoining surface in
+   * surfaces order; defaults to 0.5 (a chord distance on curved surfaces).
+   * @param options.angle - Angle in degrees from that surface toward the material;
+   * strictly between 0 and 90, default 45.
+   * @param options.boundaries - Boundary indices; omitted or empty means all.
+   * @returns A new solid retaining the original child nodes in a new child array.
+   * @throws {@link RangeError} for invalid options, oversized bevels, or unresolved intersections.
+   * @see {@link chamfer}
+   */
+  chamfer(options: {
+    /** Positive setback on the first adjoining surface; defaults to 0.5. */
+    length?: number;
+    /** Angle in degrees; defaults to 45. */
+    angle?: number;
+    /** Indices in this.boundaries; omitted or empty selects all boundaries. */
+    boundaries?: readonly number[];
+  } = {}): Solid { return chamfer({ ...options, solid: this }); }
 
   protected override triangulateUncached(): Float32Array {
     const own = Surface.triangulateAll(this.surfaces), children = super.triangulateUncached();

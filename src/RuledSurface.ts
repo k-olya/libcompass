@@ -49,6 +49,7 @@ export class RuledSurface extends SpatialSurface {
       },
       boundaryLoops: start.isLoop() ? (apex ? [[start]] : [[start], [end]])
         : [apex ? [start, ...lateral] : [start, lateral[0], end, lateral[1]]],
+      sides: { v0: start, v1: apex ? undefined : end, u0: lateral[1], u1: lateral[0] },
       periodicU: start.isLoop(), reversed,
     });
     this.start = start;

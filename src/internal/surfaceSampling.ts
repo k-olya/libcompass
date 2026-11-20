@@ -24,10 +24,14 @@ export function sampleSurface(surface: { at(u: number, v: number): Vertex }, uSe
       const c = at(u[i], v[j + 1]).position, d = at(u[i + 1], v[j + 1]).position;
       const um = (u[i] + u[i + 1]) / 2, vm = (v[j] + v[j + 1]) / 2;
       const error = (actual: Vertex, x: typeof a, y: typeof a) => vec3.distance(actual.position, vec3.lerp([0, 0, 0], x, y, 0.5));
-      if (Math.max(error(at(um, v[j]), a, b), error(at(um, v[j + 1]), c, d)) > TRIANGULATION_RESOLUTION) addU.add(um);
-      if (Math.max(error(at(u[i], vm), a, c), error(at(u[i + 1], vm), b, d)) > TRIANGULATION_RESOLUTION) addV.add(vm);
+      const refineU = Math.max(error(at(um, v[j]), a, b), error(at(um, v[j + 1]), c, d)) > TRIANGULATION_RESOLUTION;
+      const refineV = Math.max(error(at(u[i], vm), a, c), error(at(u[i + 1], vm), b, d)) > TRIANGULATION_RESOLUTION;
+      if (refineU) addU.add(um);
+      if (refineV) addV.add(vm);
       // Include the diagonal used by the triangles, not just the bilinear patch.
-      if (error(at(um, vm), a, d) > TRIANGULATION_RESOLUTION) { addU.add(um); addV.add(vm); }
+      // Resolve known directional curvature first. Otherwise a cylindrical
+      // trim needlessly subdivides its perfectly straight direction too.
+      if (!refineU && !refineV && error(at(um, vm), a, d) > TRIANGULATION_RESOLUTION) { addU.add(um); addV.add(vm); }
     }
     if (!addU.size && !addV.size) return { u, v, vertices: u.map(a => v.map(b => at(a, b))) };
     u = sorted([...u, ...addU]); v = sorted([...v, ...addV]);

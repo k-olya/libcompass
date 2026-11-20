@@ -77,6 +77,22 @@ function intersect(a: Triangle, b: Triangle, epsilon: number): boolean {
   const shared = a.points.filter((_, i) => b.ids.includes(a.ids[i]));
   if (shared.length === 3) return true;
   if (shared.length === 2) return false; // Incident triangles share their physical mesh edge.
+  if (shared.length === 1) {
+    // A separating plane through the common vertex proves that these triangles
+    // meet only there. This also avoids unstable grazing-plane intersections
+    // between adjacent rows on a nearly planar or conical surface.
+    const first = a.points.filter(point => point !== shared[0]).map(point => sub(point, shared[0]));
+    const second = b.points.filter(point => !vec3.exactEquals(point, shared[0])).map(point => sub(point, shared[0]));
+    const axes = [[1, 0, 0], [0, 1, 0], [0, 0, 1], cross(first[0], first[1]), cross(second[0], second[1]),
+      ...first.flatMap(x => second.map(y => cross(x, y)))] as ReadonlyVec3[];
+    for (const axis of axes) {
+      const length = vec3.length(axis);
+      if (length === 0) continue;
+      const da = first.map(point => vec3.dot(point, axis) / length), db = second.map(point => vec3.dot(point, axis) / length);
+      if ((Math.min(...da) > epsilon && Math.max(...db) <= epsilon) || (Math.max(...da) < -epsilon && Math.min(...db) >= -epsilon)
+        || (Math.min(...db) > epsilon && Math.max(...da) <= epsilon) || (Math.max(...db) < -epsilon && Math.min(...da) >= -epsilon)) return false;
+    }
+  }
   const normal = (triangle: Triangle) => vec3.normalize([0, 0, 0], cross(sub(triangle.points[1], triangle.points[0]), sub(triangle.points[2], triangle.points[0])));
   const na = normal(a), nb = normal(b);
   const distances = (triangle: Triangle, plane: Triangle, n: ReadonlyVec3) => triangle.points.map(p => vec3.dot(sub(p, plane.points[0]), n));

@@ -22,7 +22,8 @@ export class SpatialSurface extends Surface {
   readonly periodicV: boolean;
   readonly reversed: boolean;
   private readonly evaluate: (u: number, v: number) => Vertex;
-  private readonly sides: SurfaceSides;
+  /** Physical boundaries at the four parameter-domain sides, in increasing parameter order. */
+  readonly sides: Readonly<SurfaceSides>;
   private grid?: SurfaceGrid;
 
   /**

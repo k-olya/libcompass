@@ -180,6 +180,92 @@ multiple patches. Trimming preserves the original surface equations and only
 tessellation produces facets. `SpatialSurface.sides` now exposes its physical
 parameter-side metadata, including for `RuledSurface`.
 
+`trimCurve({ curve, cutters, keep })` trims at intersections with cutting geometry
+and returns the piece containing `keep`, a parameter on the original curve in
+`[0, 1]`. Planar curves and line segments accept planar curve, segment, or
+infinite-line cutters; spatial curves and edges accept world-space planes. A
+plane can also cut a planar curve placed on world XY. `cutters` must contain at
+least one item. A loop's retained piece may cross its original parameter seam.
+The result has a fresh normalized `[0, 1]` domain; straight inputs remain straight.
+A missed cutter retains the whole curve, while `keep` on a cut is ambiguous and
+throws. Source objects are unchanged.
+
+```ts
+const arc = trimCurve({
+  curve: circle({ center: { x: 0, y: 0 }, radius: 5 }),
+  cutters: [line({ point: { x: 0, y: 0 }, direction: [0, 1] })],
+  keep: 0, // The right semicircle, crossing the original circle's parameter seam.
+});
+```
+
+`trimSurface({ surface, cutter, keep })` returns an array of retained connected
+patches, or `[]` when everything is removed. With a world-space `Plane`, keep
+`'positive'` (the default, following its normal) or `'negative'`. With a closed
+`PlanarCurve`, keep `'inside'` (the default) or `'outside'`; the cutter uses a
+planar `Face`'s own local XY frame. Faces can split into disconnected pieces or
+gain holes. Existing unchanged boundaries are reused and new trim joins share
+vertex identities. This trims individual open surfaces, without capping a solid.
+
+```ts
+const patches = trimSurface({ surface: part.surfaces[0], cutter: YZ, keep: 'positive' });
+scene.add(solid({ surfaces: patches })); // Display the retained open patches.
+```
+
+For curved surfaces, plane cuts currently require one continuous intersection
+rail crossing each line of an open parameter direction exactly once, away from
+the ends. The result uses the same `TrimmedSurface` chart representation as
+chamfers. Oblique cuts across cylinder walls are supported, including periodic
+rims without seam edges. Cuts needing several charts, such as torus sections or
+an interior closed contour on a curved patch, and curved cutters on spatial
+surfaces currently throw. Coincident, touching or unresolved arrangements also
+report errors. These are numerical operations: `sample()` locates candidate
+intersections and analyzes regions; original equations refine cut points and
+remain authoritative for new curves/surfaces. Sampling overrides and their
+parameter metadata are preserved, including when trimming or lifting a trim.
+Oscillations hidden between supplied samples cannot be certified.
+
+`intersect({ solid, tool })` retains the two solids' common volume, while
+`difference({ solid, tool })` removes the tool's volume from the first solid.
+Instance forms are `part.intersect({ tool })` and `part.difference({ tool })`.
+Each returns a new `Solid`, leaving both operands' topology, coordinates and
+memoized triangulations unchanged. Only the operands' own surfaces participate;
+the first operand's child nodes are retained unchanged in a fresh child array.
+An empty result has `surfaces: []`. Face/edge/point-only contact has no shared
+volume: intersection is empty and difference retains the original volume.
+
+```ts
+const common = intersect({ solid: part, tool: cutter });
+const remaining = part.difference({ tool: cutter });
+scene.add(remaining);
+```
+
+`extrudeCut({ solid, sketch, length, axis, angle })` and
+`part.extrudeCut({ sketch, length, axis, angle })` are exactly an ordinary
+`extrude` followed by `difference` with the new extrusion as the tool. The signed
+length, internally normalized axis (default sketch normal), and degree draft
+angle (default zero) have the same meaning as in extrusion. Cuts do not extend
+automatically through the target; position the sketch and choose sufficient
+length for the desired blind or through cut.
+
+```ts
+const holeSketch = sketch().add(circle({ center: { x: 5, y: 5 }, radius: 1 }));
+const drilled = part.extrudeCut({ sketch: holeSketch, length: 10 });
+scene.add(drilled);
+```
+
+Boolean results retain mathematical faces, curves and surface evaluators with
+shared sewn boundaries, including reversed tool surfaces lining pockets and
+enclosed cavities. This first version supports planar cuts, coplanar overlap,
+disconnected results, and supported single-rail plane/curved-surface cuts such as
+circular holes or drafted pockets lying inside a block's perimeter. Unchanged
+curved patches can also be retained or reversed. General curved surface/surface
+intersections, coincident curved walls, open curved intersection rails,
+multiple-chart trims, and unresolved surface sewing report explicit errors.
+Inputs and nonempty results must be closed, consistently oriented manifolds.
+Temporary meshes discover intersections, classify regions and validate results;
+they never become the output topology. These checks share the library's
+numerical sampling limits: hidden oscillations require sampling overrides.
+
 CAD operation functions perform geometric work on math objects such as sketches,
 solids, and curves. They live in `src/operations/`; for example, `extrude` is
 available from the root or `libcompass/operations/extrude`. The previous

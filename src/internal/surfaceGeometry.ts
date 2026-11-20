@@ -22,7 +22,7 @@ export function surfaceFrame(surface: ParametricFace, uv: Point) {
   };
   const du = derivative('x'), dv = derivative('y');
   const normal = vec3.normalize([0, 0, 0], vec3.cross([0, 0, 0], du, dv));
-  if (vec3.length(normal) === 0) throw new RangeError('Chamfer reaches a singular surface');
+  if (vec3.length(normal) === 0) throw new RangeError('Operation reaches a singular surface');
   if (surface.reversed) vec3.negate(normal, normal);
   return { du, dv, normal };
 }

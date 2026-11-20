@@ -1,5 +1,10 @@
 import { Memo } from './Memo.js';
 import { chamfer } from './operations/chamfer.js';
+import { intersect } from './operations/intersect.js';
+import { difference } from './operations/difference.js';
+import { extrudeCut } from './operations/extrudeCut.js';
+import type { ReadonlyVec3 } from 'gl-matrix';
+import type { Sketch } from './Sketch.js';
 import type { SpatialBoundary } from './SpatialBoundary.js';
 import { Surface } from './Surface.js';
 import type { Vertex } from './Vertex.js';
@@ -50,6 +55,52 @@ export class Solid extends Memo {
     /** Indices in this.boundaries; omitted or empty selects all boundaries. */
     boundaries?: readonly number[];
   } = {}): Solid { return chamfer({ ...options, solid: this }); }
+
+  /**
+   * Return the shared volume of this solid and the tool, leaving both unchanged.
+   * @param options.tool - Second solid; only each operand's own surfaces participate.
+   * @returns A new solid retaining this solid's child nodes in a fresh array.
+   * @throws {@link RangeError} for invalid inputs or unsupported/unresolved intersections.
+   * @see {@link intersect}
+   */
+  intersect(options: {
+    /** Second operand; never mutated. */
+    tool: Solid;
+  }): Solid { return intersect({ ...options, solid: this }); }
+
+  /**
+   * Return this solid with the tool's volume removed, leaving both unchanged.
+   * @param options.tool - Cutting solid; its child nodes do not participate.
+   * @returns A new solid retaining this solid's child nodes in a fresh array.
+   * @throws {@link RangeError} for invalid inputs or unsupported/unresolved intersections.
+   * @see {@link difference}
+   */
+  difference(options: {
+    /** Cutting solid; never mutated. */
+    tool: Solid;
+  }): Solid { return difference({ ...options, solid: this }); }
+
+  /**
+   * Extrude a sketch and subtract it from this solid without modifying either.
+   * @param options - Cutting sketch, signed length, optional axis and draft angle.
+   * @param options.sketch - Closed profiles defining the cutting extrusion.
+   * @param options.length - Finite, nonzero signed extrusion length.
+   * @param options.axis - Direction normalized internally; defaults to the sketch normal.
+   * @param options.angle - Draft angle in degrees, default zero, strictly between -90 and 90.
+   * @returns A new solid; equivalent to this.difference({ tool: extrude(options) }).
+   * @throws {@link RangeError} for extrusion errors or unsupported/invalid boolean cuts.
+   * @see {@link extrudeCut}
+   */
+  extrudeCut(options: {
+    /** Closed cutting profiles on their placement plane. */
+    sketch: Sketch;
+    /** Signed extrusion length; negative reverses travel. */
+    length: number;
+    /** Direction normalized internally; defaults to the sketch normal. */
+    axis?: ReadonlyVec3;
+    /** Draft angle in degrees; defaults to zero. */
+    angle?: number;
+  }): Solid { return extrudeCut({ ...options, solid: this }); }
 
   protected override triangulateUncached(): Float32Array {
     const own = Surface.triangulateAll(this.surfaces), children = super.triangulateUncached();

@@ -80,6 +80,30 @@
   TrimmedSurface chart and share exact rails with the bevel. Respect source
   sampling overrides and reject unresolved intersections, folds and unsupported
   curved corners rather than falling back to a mesh-only solid.
+- Geometric trims take cutting geometry, not parameter ranges: `trimCurve`
+  retains the interval containing an original normalized `keep` parameter;
+  `trimSurface` returns connected retained surface patches, selecting a plane's
+  positive/negative side or a closed planar cutter's inside/outside region.
+  Closed face cutters use the Face's local XY frame. Preserve source equations,
+  source sampling overrides, shared cut vertices and unchanged boundary objects.
+  Sampling discovers intersections and classifies regions; refine cut points
+  against the original equations. Reject coincident, ambiguous or unresolved
+  arrangements. Spatial-surface cuts must fit supported regular charts; never
+  substitute a mesh or silently discard an unsupported component. Trimming an
+  individual surface does not cap it or turn it into a closed solid.
+- Solid booleans are regularized, nonmutating operations: `intersect` retains
+  shared volume; `difference` removes the tool volume. Inputs must have closed,
+  consistently oriented manifold own surfaces; child nodes are excluded from
+  geometry and the first operand's children are retained in a fresh child array.
+  Empty results use `new Solid({ surfaces: [] })`. `extrudeCut` is exactly
+  `difference({ solid, tool: extrude(options) })`, with ordinary signed length,
+  normalized axis and degree draft semantics; never extend the cut implicitly.
+  Preserve mathematical surfaces and sew shared exact boundary objects, reversing
+  tool walls in differences. Temporary meshes may discover intersections,
+  classify regions and validate closure, never replace result surfaces. The first
+  version may reject curved surface/surface intersections, curved coincidence,
+  multi-chart cuts and unresolved topology explicitly. Do not return a partial,
+  open or faceted fallback result when sewing or validation fails.
 - Use the same default sampling rule for every planar or spatial curve without
   a sampling override: start with normalized parameters `[0, 0.5, 1]`. For each
   interval `[a, b]`, compare `at((a + b) / 2)` with the midpoint of the line

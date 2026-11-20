@@ -30,7 +30,7 @@ export class SpatialSurface extends Surface {
    * Create a mathematical surface without replacing it with a mesh.
    * @param options - Evaluator, physical boundary loops, parameter sides, periodicity, and orientation.
    * @remarks Sides use increasing parameters and must agree with at(). Periodic seams are not boundaries.
-   * General curved trimming inside the parameter rectangle is not supported yet.
+   * Use trimSurface for supported geometric cuts, or TrimmedSurface for an explicit retained chart.
    */
   constructor({ at, boundaryLoops = [], sides = {}, periodicU = false, periodicV = false, reversed = false }: {
     at: (u: number, v: number) => Vertex;
@@ -94,7 +94,7 @@ export class SpatialSurface extends Surface {
  * Constructor shorthand for `new SpatialSurface(options)`; returns a new {@link SpatialSurface} instance.
  * @param options - Evaluator, physical boundary loops, parameter sides, periodicity, and orientation.
  * @remarks Sides use increasing parameters and must agree with at(). Periodic seams are not boundaries.
- * General curved trimming inside the parameter rectangle is not supported yet.
+ * Use trimSurface for supported geometric cuts, or TrimmedSurface for an explicit retained chart.
  */
 export function spatialSurface(options: {
   /** Surface evaluator on [0, 1]². */

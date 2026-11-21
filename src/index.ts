@@ -19,6 +19,7 @@ export { PI, radtodeg, degtorad } from './util/angles.js';
 export type { Point } from './Point.js';
 export { Line, line } from './Line.js';
 export { LineSegment, lineSegment } from './LineSegment.js';
+export { roundPolyline } from './operations/roundPolyline.js';
 export { polyline } from './operations/polyline.js';
 export { rectangle } from './operations/rectangle.js';
 export { centerRectangle } from './operations/centerRectangle.js';

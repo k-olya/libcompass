@@ -178,3 +178,18 @@ test('invalid options, nonmanifold input, oversized radii and unsupported corner
   const empty = new Solid({ surfaces: [] });
   assert.deepEqual(empty.round().surfaces, []); assert.notEqual(empty.round(), empty);
 });
+
+test('opposite edge rounds keep reversed shared rails watertight at the exact limiting radius', () => {
+  for (const [plane, length] of [[XY, 20], [XY, -20], [ZX, 20], [YZ, -20]]) {
+    const source = sketch({ plane }).add(centerRectangle({ center, corner: { x: 10, y: 10 } })).extrude({ length });
+    const pairs = source.surfaces.flatMap(face => [[face.outer[0], face.outer[2]], [face.outer[1], face.outer[3]]])
+      .map(pair => pair.map(boundary => source.boundaries.indexOf(boundary)));
+    const cached = source.triangulate(), bytes = cached.slice();
+    for (const boundaries of pairs) for (const radius of [9.9, 10]) {
+      const result = source.round({ radius, boundaries });
+      assert.equal(result.surfaces.length, radius === 10 ? 7 : 8);
+      check(result, 8000 - 40 * radius ** 2 * (1 - Math.PI / 4));
+    }
+    assert.equal(source.triangulate(), cached); assert.deepEqual(cached, bytes);
+  }
+});

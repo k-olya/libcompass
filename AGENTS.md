@@ -86,7 +86,10 @@
   rim/apex specialization. `Surface.boundaryLoops` lists physical boundaries,
   possibly none for a closed periodic surface; only `Face` has outer/holes.
   Refine both surface parameters and synchronize shared boundaries during
-  tessellation. Periodic seams must share mesh coordinates without adding edges.
+  tessellation. A shared boundary may run forward or backward on each surface:
+  preserve that direction in parameter synchronization and mesh vertex order,
+  including nonuniform sample overrides. Periodic seams must share mesh
+  coordinates without adding edges.
 - Preserve shared vertex and edge identities in solids so topology can be reused
   for further operations. Curves remain mathematical through extrusion. Profile
   analysis may use temporary sampled polylines; triangulation generates the

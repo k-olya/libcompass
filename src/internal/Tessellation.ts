@@ -3,57 +3,78 @@ import type { SpatialBoundary } from '../SpatialBoundary.js';
 import type { Vertex } from '../Vertex.js';
 import { vec3 } from 'gl-matrix';
 
+type Group = { members: Map<SpatialBoundary, boolean>; symmetric: boolean };
+const parameterTolerance = 16 * Number.EPSILON;
+
 /** Per-mesh shared subdivision and vertex storage; never changes analytic topology. */
 export class Tessellation {
   revision = 0;
   private requests = new Map<SpatialBoundary, Set<number>>();
   private source = new Map<SpatialBoundary, { t: number; point: Vertex }[]>();
-  private groups = new Map<SpatialBoundary, Set<SpatialBoundary>>();
+  private groups = new Map<SpatialBoundary, Group>();
   private samples = new Map<SpatialBoundary, Vertex[]>();
-  /** Synchronize the two parameter directions of a ruled surface before sampling. */
-  link(a: SpatialBoundary, b: SpatialBoundary): void {
-    const first = this.groups.get(a) ?? new Set([a]), second = this.groups.get(b) ?? new Set([b]);
-    const size = first.size;
-    for (const boundary of second) first.add(boundary);
-    if (first.size !== size) { this.revision++; this.samples.clear(); }
-    for (const boundary of first) this.groups.set(boundary, first);
+  private group(boundary: SpatialBoundary): Group {
+    let group = this.groups.get(boundary);
+    if (!group) {
+      group = { members: new Map([[boundary, false]]), symmetric: false };
+      this.groups.set(boundary, group);
+    }
+    return group;
   }
 
-  /** Request matching normalized parameters while retaining sample() overrides. */
-  request(boundary: SpatialBoundary, values: readonly number[]): void {
-    const group = this.groups.get(boundary) ?? new Set([boundary]);
-    for (const item of group) {
-      const requested = this.requests.get(item) ?? new Set<number>();
-      const size = requested.size;
-      const existing = this.parameters(item);
-      for (const value of values) requested.add(existing.find(t => Math.abs(t - value) < 1e-10) ?? value);
-      this.requests.set(item, requested);
-      if (requested.size !== size) { this.revision++; this.samples.clear(); }
+  /** Synchronize subdivisions, retaining each boundary's direction relative to the group. */
+  link(a: SpatialBoundary, b: SpatialBoundary, reversed = false): void {
+    const first = this.group(a), second = this.group(b);
+    const flip = (first.members.get(a)! !== second.members.get(b)!) !== reversed;
+    if (first === second) {
+      // A closed chain can identify t with 1-t; its subdivision then needs both.
+      if (!flip || first.symmetric) return;
+      first.symmetric = true;
+    } else {
+      for (const [boundary, direction] of second.members) {
+        first.members.set(boundary, direction !== flip);
+        this.groups.set(boundary, first);
+      }
+      first.symmetric ||= second.symmetric;
     }
+    this.revision++; this.samples.clear();
+  }
+
+  /** Request native boundary parameters, retaining sampling overrides and group directions. */
+  request(boundary: SpatialBoundary, values: readonly number[]): void {
+    const known = this.requests.has(boundary), requested = this.requests.get(boundary) ?? new Set<number>();
+    const size = requested.size, existing = this.parameters(boundary);
+    for (const value of values) if (!existing.some(t => Math.abs(t - value) <= parameterTolerance)) requested.add(value);
+    this.requests.set(boundary, requested);
+    if (!known || requested.size !== size) { this.revision++; this.samples.clear(); }
   }
 
   parameters(boundary: SpatialBoundary): number[] {
-    const group = this.groups.get(boundary) ?? new Set([boundary]);
-    return [...new Set([...group].flatMap(item => {
+    const group = this.group(boundary);
+    let values = [...group.members].flatMap(([item, reversed]) => {
       let samples = this.source.get(item);
       if (!samples) this.source.set(item, samples = parameterizedSamples(item));
-      return [...samples.map(sample => sample.t), ...(this.requests.get(item) ?? [])];
-    }))].sort((a, b) => a - b);
+      return [...samples.map(sample => sample.t), ...(this.requests.get(item) ?? [])].map(t => reversed ? 1 - t : t);
+    });
+    if (group.symmetric) values = [...values, ...values.map(t => 1 - t)];
+    values = values.map(t => t < parameterTolerance ? 0 : t > 1 - parameterTolerance ? 1 : t).sort((a, b) => a - b);
+    values = values.filter((t, i) => !i || t - values[i - 1] > parameterTolerance);
+    return group.members.get(boundary) ? values.map(t => 1 - t).reverse() : values;
   }
 
   vertices(boundary: SpatialBoundary): Vertex[] {
     const existing = this.samples.get(boundary);
     if (existing) return existing;
-    const group = this.groups.get(boundary) ?? new Set([boundary]);
-    if ([...group].some(item => this.requests.has(item))) {
-      const parameters = this.parameters(boundary);
-      for (const item of group) {
+    const group = this.group(boundary);
+    if ([...group.members.keys()].some(item => this.requests.has(item))) {
+      for (const item of group.members.keys()) {
+        const parameters = this.parameters(item);
         const samples = this.source.get(item)!;
         let i = 0;
         const points = parameters.map(t => {
-          while (i + 1 < samples.length - 1 && samples[i + 1].t < t) i++;
-          if (t === samples[i].t) return samples[i].point;
-          if (t === samples[i + 1].t) return samples[i + 1].point;
+          while (i + 1 < samples.length - 1 && samples[i + 1].t < t - parameterTolerance) i++;
+          if (Math.abs(t - samples[i].t) <= parameterTolerance) return samples[i].point;
+          if (Math.abs(t - samples[i + 1].t) <= parameterTolerance) return samples[i + 1].point;
           const fraction = (t - samples[i].t) / (samples[i + 1].t - samples[i].t);
           return { position: vec3.lerp([0, 0, 0], samples[i].point.position, samples[i + 1].point.position, fraction) };
         });
@@ -61,10 +82,10 @@ export class Tessellation {
       }
       return this.samples.get(boundary)!;
     }
-    const polylines = [...group].map(item => {
+    const polylines = [...group.members].map(([item, reversed]) => {
       const points = item.sample();
       if (points.length < 2) throw new RangeError('Boundary sampling must include both endpoints');
-      return { boundary: item, points };
+      return { boundary: item, points: reversed ? [...points].reverse() : points };
     });
     // Pair polylines by sample order, retaining every supplied vertex. New
     // vertices interpolate segments; consumers never reevaluate curve equations.
@@ -76,7 +97,7 @@ export class Tessellation {
         const start = Math.floor(index);
         return { position: vec3.lerp([0, 0, 0], points[start].position, points[start + 1].position, index - start) };
       });
-      this.samples.set(item, vertices);
+      this.samples.set(item, group.members.get(item) ? vertices.reverse() : vertices);
     }
     return this.samples.get(boundary)!;
   }

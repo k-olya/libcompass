@@ -1,3 +1,4 @@
+import { vec3 } from 'gl-matrix';
 import { Surface } from './Surface.js';
 import type { SpatialBoundary } from './SpatialBoundary.js';
 import { validateVertex, type Vertex } from './Vertex.js';
@@ -5,7 +6,7 @@ import { sampleSurface, type SurfaceGrid } from './internal/surfaceSampling.js';
 import type { Tessellation } from './internal/Tessellation.js';
 import type { RigidContext } from './internal/rigidContext.js';
 
-/** Physical parameter-domain sides; omit sides identified across periodic seams. */
+/** Physical parameter-domain sides; boundaries may run in either direction. Omit periodic seams. */
 export interface SurfaceSides {
   /** Boundary along v, at u = 0. */
   u0?: SpatialBoundary;
@@ -25,14 +26,15 @@ export class SpatialSurface extends Surface {
   /** Shared singular vertices at collapsed parameter sides, such as sphere poles. */
   readonly poles: readonly Vertex[];
   private readonly evaluate: (u: number, v: number) => Vertex;
-  /** Physical boundaries at the four parameter-domain sides, in increasing parameter order. */
+  /** Physical boundaries at the four parameter-domain sides, in either native direction. */
   readonly sides: Readonly<SurfaceSides>;
   private grid?: SurfaceGrid;
+  private directions = new Map<keyof SurfaceSides, boolean>();
 
   /**
    * Create a mathematical surface without replacing it with a mesh.
    * @param options - Evaluator, physical boundary loops, parameter sides, periodicity, and orientation.
-   * @remarks Sides use increasing parameters and must agree with at(). Periodic seams are not boundaries.
+   * @remarks Sides agree with at() using t or 1-t. Periodic seams are not boundaries.
    * Use trimSurface for supported geometric cuts, or TrimmedSurface for an explicit retained chart.
    */
   constructor({ at, boundaryLoops = [], sides = {}, periodicU = false, periodicV = false, reversed = false, poles = [] }: {
@@ -83,26 +85,48 @@ export class SpatialSurface extends Surface {
       periodicU: this.periodicU, periodicV: this.periodicV, reversed: this.reversed, poles: this.poles.map(context.vertex) }), context);
   }
 
+  /** Infer a side's native boundary direction, including loops with identical endpoints. */
+  private sideReversed(side: keyof SurfaceSides): boolean {
+    const cached = this.directions.get(side);
+    if (cached !== undefined) return cached;
+    const boundary = this.sides[side]!;
+    const at = (t: number) => side === 'u0' ? this.at(0, t) : side === 'u1' ? this.at(1, t)
+      : side === 'v0' ? this.at(t, 0) : this.at(t, 1);
+    const probes = boundary.isLoop() ? [0.25, 0.75] : [0, 1];
+    const error = (reversed: boolean) => probes.reduce((sum, t) => sum
+      + vec3.squaredDistance(at(t).position, boundary.at(reversed ? 1 - t : t).position), 0);
+    const reversed = error(true) < error(false);
+    this.directions.set(side, reversed);
+    return reversed;
+  }
+
   protected override prepare(context: Tessellation): void {
-    const { u0, u1, v0, v1 } = this.sides;
-    if (u0 && u1) context.link(u0, u1);
-    if (v0 && v1) context.link(v0, v1);
-    const u = [v0, v1].flatMap(side => side ? context.parameters(side) : []);
-    const v = [u0, u1].flatMap(side => side ? context.parameters(side) : []);
+    const link = (a: keyof SurfaceSides, b: keyof SurfaceSides) => {
+      if (this.sides[a] && this.sides[b]) context.link(this.sides[a]!, this.sides[b]!, this.sideReversed(a) !== this.sideReversed(b));
+    };
+    link('u0', 'u1'); link('v0', 'v1');
+    const parameters = (side: keyof SurfaceSides) => this.sides[side] ? context.parameters(this.sides[side]!)
+      .map(t => this.sideReversed(side) ? 1 - t : t) : [];
     const samples = this.sample();
-    this.grid = sampleSurface(this, [...samples.u, ...u], [...samples.v, ...v]);
-    for (const side of [v0, v1]) if (side) context.request(side, this.grid.u);
-    for (const side of [u0, u1]) if (side) context.request(side, this.grid.v);
+    this.grid = sampleSurface(this, [...samples.u, ...parameters('v0'), ...parameters('v1')],
+      [...samples.v, ...parameters('u0'), ...parameters('u1')]);
+    for (const side of ['v0', 'v1', 'u0', 'u1'] as const) if (this.sides[side]) {
+      const values = side[0] === 'v' ? this.grid.u : this.grid.v;
+      context.request(this.sides[side]!, values.map(t => this.sideReversed(side) ? 1 - t : t));
+    }
   }
 
   protected override mesh(context: Tessellation): Float32Array {
     const grid = this.grid ?? this.sample(), { u, v } = grid;
     const points = grid.vertices.map(row => [...row]);
-    const { u0, u1, v0, v1 } = this.sides;
-    if (u0) points[0] = [...context.vertices(u0)];
-    if (u1) points[u.length - 1] = [...context.vertices(u1)];
-    for (const [side, j] of [[v0, 0], [v1, v.length - 1]] as const) {
-      if (side) context.vertices(side).forEach((point, i) => { points[i][j] = point; });
+    const vertices = (side: keyof SurfaceSides) => {
+      const points = [...context.vertices(this.sides[side]!)];
+      return this.sideReversed(side) ? points.reverse() : points;
+    };
+    if (this.sides.u0) points[0] = vertices('u0');
+    if (this.sides.u1) points[u.length - 1] = vertices('u1');
+    for (const [side, j] of [['v0', 0], ['v1', v.length - 1]] as const) {
+      if (this.sides[side]) vertices(side).forEach((point, i) => { points[i][j] = point; });
     }
     if (this.periodicU) points[u.length - 1] = points[0];
     if (this.periodicV) for (const row of points) row[v.length - 1] = row[0];
@@ -133,7 +157,7 @@ export class SpatialSurface extends Surface {
  *
  * Constructor shorthand for `new SpatialSurface(options)`; returns a new {@link SpatialSurface} instance.
  * @param options - Evaluator, physical boundary loops, parameter sides, periodicity, and orientation.
- * @remarks Sides use increasing parameters and must agree with at(). Periodic seams are not boundaries.
+ * @remarks Sides agree with at() using t or 1-t. Periodic seams are not boundaries.
  * Use trimSurface for supported geometric cuts, or TrimmedSurface for an explicit retained chart.
  */
 export function spatialSurface(options: {

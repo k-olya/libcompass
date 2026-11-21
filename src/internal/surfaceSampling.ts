@@ -6,9 +6,13 @@ export type SurfaceGrid = { u: number[]; v: number[]; vertices: Vertex[][] };
 
 /** Conforming tensor grid: refine entire parameter lines to avoid internal T junctions. */
 export function sampleSurface(surface: { at(u: number, v: number): Vertex }, uSeeds: readonly number[] = [], vSeeds: readonly number[] = []): SurfaceGrid {
-  const sorted = (values: readonly number[]) => [...new Set([0, 0.5, 1, ...values])].sort((a, b) => a - b);
+  if ([...uSeeds, ...vSeeds].some(t => !Number.isFinite(t) || t < 0 || t > 1)) throw new RangeError('Surface sample parameters must be in [0, 1]');
+  // Reversing t twice can differ by a few ulps; those are one grid station.
+  const tolerance = 16 * Number.EPSILON;
+  const sorted = (values: readonly number[]) => [0, 0.5, 1, ...values]
+    .map(t => t < tolerance ? 0 : t > 1 - tolerance ? 1 : t).sort((a, b) => a - b)
+    .filter((t, i, all) => !i || t - all[i - 1] > tolerance);
   let u = sorted(uSeeds), v = sorted(vSeeds);
-  if ([...u, ...v].some(t => !Number.isFinite(t) || t < 0 || t > 1)) throw new RangeError('Surface sample parameters must be in [0, 1]');
   const cache = new Map<string, Vertex>();
   const at = (a: number, b: number) => {
     const key = `${a},${b}`;

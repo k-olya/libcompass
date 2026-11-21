@@ -201,6 +201,12 @@ trims, overlaps, and unresolved offset intersections throw explicitly. Geometry
 is checked for shared manifold topology and a closed, consistently oriented,
 non-self-intersecting sampled mesh before the result is returned.
 
+A shared boundary can run forward on one spatial surface and backward on the
+other. Tessellation maps both sample parameters and vertex order to each surface's
+direction, preserving nonuniform curve sampling overrides. This also applies when
+opposing rounds meet at the limiting radius and their contact rails become one
+shared boundary.
+
 `TrimmedSurface` and `trimmedSurface` retain the source `SpatialSurface` and a
 chart mapping [0, 1]² into its retained parameter region. Curved chart sides and
 periodic annuli are supported, with shared physical boundaries and no seam edges.
@@ -409,6 +415,23 @@ const triangle = polyline({ points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y:
 arrays: `s.add(point, segments, anotherPoint)`. Array arguments are flattened one
 level in order, retaining object identities. Existing `s.add(...segments)` calls
 still work; passing an array directly avoids function argument limits for large inputs.
+
+`roundPolyline({ segments, radius = 0.5 })` rounds shared endpoints of line
+segments into exact tangent circular arcs. It returns a new array of
+`LineSegment | PlanarCurve` objects without modifying source segments or points.
+Endpoints match by exact XY coordinates; the input may be unordered, reversed,
+open, or disconnected. Unshared endpoints stay unchanged. Straight continuations
+remain straight. More than two segments at one endpoint, overlapping/backtracking
+rays, or insufficient segment length for both incident rounds throw. Segments
+fully consumed at the radius limit are omitted, sharing a tangent point between
+the adjoining arcs. Ordered input retains its traversal order and direction.
+Profile intersections are checked when extruding.
+
+```ts
+const segments = rectangle({ start: { x: 0, y: 0 }, end: { x: 10, y: 6 } });
+const rounded = roundPolyline({ segments, radius: 1 });
+const part = sketch().add(rounded).extrude({ length: 2 });
+```
 
 Polyline joins consecutive `points`; `loop` defaults to false. With `loop: true`,
 it connects the last point to the first and accepts an already repeated closing

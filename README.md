@@ -316,6 +316,59 @@ returns a `Vertex`; `plane.toLocal(vertexOrVec3)` returns a `Point` and rejects
 points off the plane. Extrusion vectors are in world coordinates and may be
 oblique or point against the plane normal, but must have a nonzero normal component.
 
+## Circular arcs
+
+`arc` returns a mathematical `PlanarCurve`, using the normal adaptive sampling
+and analytic lifting pipeline. Choose one of four constructions:
+
+```ts
+// Circle center and endpoints, with travel direction (counterclockwise by default).
+const a = arc({ center: { x: 0, y: 0 }, start: { x: 5, y: 0 },
+  end: { x: 0, y: 5 }, direction: 'clockwise' });
+// Endpoints and signed sweep in degrees.
+const b = arc({ start: { x: 0, y: 0 }, end: { x: 10, y: 0 }, angle: 180 });
+// Three points on the arc; their order determines its direction.
+const c = arc({ start: { x: 0, y: 0 }, through: { x: 5, y: 5 }, end: { x: 10, y: 0 } });
+// Start point, circle center, and signed sweep; the endpoint is calculated.
+const d = arc({ start: { x: 5, y: 0 }, center: { x: 0, y: 0 }, angle: -90 });
+const s = sketch().add(b, lineSegment({ start: b.end, end: b.start }));
+```
+
+The three points in the first form are **center, start, and end**; both endpoints
+must have the same positive distance from center. Direction chooses clockwise or
+counterclockwise travel, including the major arc where appropriate. In the second
+form positive angles travel counterclockwise and negative angles clockwise;
+`0 < abs(angle) < 360`, and magnitudes over 180 create major arcs. With `through`,
+three distinct, noncollinear points determine the circle and which arc to retain;
+the through point need not be halfway along the arc. An optional `direction` must
+agree with that point order. The fourth form uses `start`, `center`, and `angle`,
+rotating start about center to calculate the endpoint; omit `end`, `through`, and
+`direction` in this form. Supplying `end`, `center`, and `angle` together is ambiguous
+and throws. Endpoints must be distinct; use `circle` for
+a full loop. `at(t)` uses [0, 1], retains endpoint identities, and provides an
+analytic tangent. An arc can join line segments or other curves to bound a profile.
+
+## Planar segment generators
+
+`polyline`, `rectangle`, and `centerRectangle` return `LineSegment[]`, with shared
+endpoint objects at each join. Add them to a sketch using a spread:
+
+```ts
+const s = sketch();
+s.add(...rectangle({ start: { x: -20, y: -10 }, end: { x: 20, y: 10 } }));
+const centered = centerRectangle({ center: { x: 5, y: 3 }, corner: { x: 10, y: 6 } });
+const triangle = polyline({ points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: 8 }], loop: true });
+```
+
+Polyline joins consecutive `points`; `loop` defaults to false. With `loop: true`,
+it connects the last point to the first and accepts an already repeated closing
+point without adding a zero-length segment. Open polylines need at least two
+points; loops need at least three. Profile validity is checked at extrusion.
+Rectangles align with the sketch's local X/Y axes. `rectangle` uses opposite
+`start` and `end` corners in either order; `centerRectangle` mirrors `corner`
+about `center`. Zero width/height and nonfinite coordinates throw. These are
+operations generating existing line segments, without additional shape classes.
+
 ## Reuse the result
 
 `Solid.surfaces` contains `Face`, `SpatialSurface` and `SurfaceRegion` instances, all extending
@@ -333,7 +386,8 @@ For angles in degrees, use `circle.at(angleDEG / 360)`; for radians, use
 [0, 1] are rejected. `planarCurve({ at: t => ({ x: t, y: t * t }) })` creates a
 general procedural planar curve without tessellation.
 
-`SpatialCurve.fromPlanarCurve({ curve, plane })` places any `PlanarCurve` on a
+`spatialCurveFromPlanar({ curve, plane })` is a shorthand for
+`SpatialCurve.fromPlanarCurve({ curve, plane })`. It places any `PlanarCurve` on a
 world-space plane (XY by default), preserving its exact evaluator and normalized
 parameterization. It also accepts plain objects implementing `at(t)` and replaces
 `fromCircle({ circle, plane })`. The placement frame is copied; source evaluators

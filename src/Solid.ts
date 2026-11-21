@@ -2,6 +2,7 @@ import type { SpatialLine } from './SpatialLine.js';
 import { rotate } from './operations/rotate.js';
 import { displace } from './operations/displace.js';
 import { Memo } from './Memo.js';
+import { round } from './operations/round.js';
 import { chamfer } from './operations/chamfer.js';
 import { intersect } from './operations/intersect.js';
 import { difference } from './operations/difference.js';
@@ -91,6 +92,21 @@ export class Solid extends Memo {
     /** Indices in this.boundaries; omitted or empty selects all boundaries. */
     boundaries?: readonly number[];
   } = {}): Solid { return chamfer({ ...options, solid: this }); }
+
+  /**
+   * Return a new rounded solid, leaving this solid and its cached mesh unchanged.
+   * @param options.radius - Positive tangent-round radius; defaults to 0.5 model units.
+   * @param options.boundaries - Original boundary indices; omitted or [] selects all.
+   * @returns A new solid retaining child node identities in a fresh array.
+   * @throws {@link RangeError} for invalid options or unsupported/unresolved rounds.
+   * @see {@link round}
+   */
+  round(options: {
+    /** Positive radius in model units; defaults to 0.5. */
+    radius?: number;
+    /** Input boundary indices; omitted or empty selects every boundary. */
+    boundaries?: readonly number[];
+  } = {}): Solid { return round({ ...options, solid: this }); }
 
   /**
    * Return the shared volume of this solid and the tool, leaving both unchanged.

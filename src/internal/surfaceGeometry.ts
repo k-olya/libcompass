@@ -31,17 +31,17 @@ export function surfaceFrame(surface: ParametricFace, uv: Point) {
 export function solve3(a: ReadonlyVec3, b: ReadonlyVec3, c: ReadonlyVec3, rhs: ReadonlyVec3): number[] {
   const bc = vec3.cross([0, 0, 0], b, c), determinant = vec3.dot(a, bc);
   if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-12 * vec3.length(a) * vec3.length(b) * vec3.length(c)) {
-    throw new RangeError('Chamfer surface intersection is tangent or unresolved');
+    throw new RangeError('Surface intersection is tangent or unresolved');
   }
   return [vec3.dot(rhs, bc), vec3.dot(a, vec3.cross([0, 0, 0], rhs, c)),
     vec3.dot(a, vec3.cross([0, 0, 0], b, rhs))].map(value => value / determinant);
 }
 
 export function checkedUV(surface: ParametricFace, uv: Point): Point {
-  if (![uv.x, uv.y].every(Number.isFinite)) throw new RangeError('Chamfer produced nonfinite surface parameters');
+  if (![uv.x, uv.y].every(Number.isFinite)) throw new RangeError('Surface operation produced nonfinite parameters');
   if (surface instanceof Face) return uv;
   if ([uv.x, uv.y].some((t, i) => !(i === 0 ? surface.periodicU : surface.periodicV) && (t < -1e-7 || t > 1 + 1e-7))) {
-    throw new RangeError('Chamfer exceeds a surface domain; corner intersection trimming is required');
+    throw new RangeError('Surface operation exceeds a parameter domain; corner intersection trimming is required');
   }
   return { x: surface.periodicU ? uv.x : Math.max(0, Math.min(1, uv.x)),
     y: surface.periodicV ? uv.y : Math.max(0, Math.min(1, uv.y)) };

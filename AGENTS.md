@@ -99,6 +99,15 @@
   TrimmedSurface chart and share exact rails with the bevel. Respect source
   sampling overrides and reject unresolved intersections, folds and unsupported
   curved corners rather than falling back to a mesh-only solid.
+- Round is a nonmutating constant-radius rolling-ball operation with the same
+  original boundary-index selection and child/cache preservation as chamfer.
+  Retain exact tangent surface evaluators and contact rails; curve types must not
+  introduce operation-level special cases. Closed curved rims intersect inward
+  offset surfaces, and three rounded planar edges meet in a spherical corner.
+  At the radius limit, remove zero-area faces/edges, share coincident rails, and
+  retain singular pole vertices without emitting degenerate triangles. Preserve
+  source sampling overrides. Reject unsupported corners, overlaps and unresolved
+  intersections explicitly rather than substituting faceted geometry.
 - Geometric trims take cutting geometry, not parameter ranges: `trimCurve`
   retains the interval containing an original normalized `keep` parameter;
   `trimSurface` returns connected retained surface patches, selecting a plane's

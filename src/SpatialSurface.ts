@@ -22,6 +22,8 @@ export class SpatialSurface extends Surface {
   readonly periodicU: boolean;
   readonly periodicV: boolean;
   readonly reversed: boolean;
+  /** Shared singular vertices at collapsed parameter sides, such as sphere poles. */
+  readonly poles: readonly Vertex[];
   private readonly evaluate: (u: number, v: number) => Vertex;
   /** Physical boundaries at the four parameter-domain sides, in increasing parameter order. */
   readonly sides: Readonly<SurfaceSides>;
@@ -33,18 +35,24 @@ export class SpatialSurface extends Surface {
    * @remarks Sides use increasing parameters and must agree with at(). Periodic seams are not boundaries.
    * Use trimSurface for supported geometric cuts, or TrimmedSurface for an explicit retained chart.
    */
-  constructor({ at, boundaryLoops = [], sides = {}, periodicU = false, periodicV = false, reversed = false }: {
+  constructor({ at, boundaryLoops = [], sides = {}, periodicU = false, periodicV = false, reversed = false, poles = [] }: {
     at: (u: number, v: number) => Vertex;
     boundaryLoops?: readonly (readonly SpatialBoundary[])[];
     sides?: SurfaceSides;
     periodicU?: boolean;
     periodicV?: boolean;
     reversed?: boolean;
+    /** Singular vertices retained even when they do not bound a physical edge. */
+    poles?: readonly Vertex[];
   }) {
     super({ boundaryLoops });
     this.evaluate = at; this.sides = sides;
+    this.poles = poles.map(validateVertex);
     this.periodicU = periodicU; this.periodicV = periodicV; this.reversed = reversed;
   }
+
+  /** Include singular poles even when no physical boundary touches them. */
+  override get vertices(): readonly Vertex[] { return [...new Set([...super.vertices, ...this.poles])]; }
 
   /** Evaluate the surface on [0, 1]², sharing coordinates across periodic seams. */
   at(u: number, v: number): Vertex {
@@ -72,7 +80,7 @@ export class SpatialSurface extends Surface {
   protected override copyTransformed(context: RigidContext): SpatialSurface {
     return this.transformedSamples(new SpatialSurface({ at: (u, v) => context.vertex(this.at(u, v)),
       boundaryLoops: this.boundaryLoops.map(loop => loop.map(context.map)), sides: this.transformedSides(context),
-      periodicU: this.periodicU, periodicV: this.periodicV, reversed: this.reversed }), context);
+      periodicU: this.periodicU, periodicV: this.periodicV, reversed: this.reversed, poles: this.poles.map(context.vertex) }), context);
   }
 
   protected override prepare(context: Tessellation): void {
@@ -103,9 +111,20 @@ export class SpatialSurface extends Surface {
     for (let i = 0; i + 1 < u.length; i++) for (let j = 0; j + 1 < v.length; j++) {
       const corners = [points[i][j], points[i + 1][j], points[i + 1][j + 1], points[i][j + 1]];
       const indices = this.reversed ? [0, 2, 1, 0, 3, 2] : [0, 1, 2, 0, 2, 3];
-      for (const index of indices) { positions.set(corners[index].position, offset); offset += 3; }
+      for (let k = 0; k < indices.length; k += 3) {
+        const triangle = indices.slice(k, k + 3).map(index => corners[index].position);
+        // A regular surface can have collapsed parameter sides (sphere poles or
+        // spherical corner tips). Emit a fan there, rather than zero-area quads.
+        const [a, b, c] = triangle.map(point => Array.from(point, Math.fround));
+        const cross = [0, 1, 2].map(i => {
+          const j = (i + 1) % 3, l = (i + 2) % 3;
+          return (b[j] - a[j]) * (c[l] - a[l]) - (b[l] - a[l]) * (c[j] - a[j]);
+        });
+        if (cross.every(value => value === 0)) continue;
+        for (const point of triangle) { positions.set(point, offset); offset += 3; }
+      }
     }
-    return positions;
+    return positions.slice(0, offset);
   }
 }
 
@@ -130,4 +149,6 @@ export function spatialSurface(options: {
   periodicV?: boolean;
   /** Reverse triangle winding. */
   reversed?: boolean;
+  /** Singular vertices, such as sphere poles; defaults to none. */
+  poles?: readonly Vertex[];
 }): SpatialSurface { return new SpatialSurface(options); }

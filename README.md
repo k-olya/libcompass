@@ -172,6 +172,35 @@ Validation uses a temporary mesh at the current resolution, with the same
 numerical limitations as sweep validation. A smooth solid with no physical
 boundaries, such as a torus, returns a new solid with its existing surfaces.
 
+`round({ solid, radius = 0.5, boundaries = [] })`, or `solid.round(options)`,
+returns a new solid with tangent constant-radius rounds. Boundary indices select
+from the original solid; omit them or pass `[]` for all boundaries. No source
+geometry, child nodes or cached triangulations are modified.
+
+Straight edges of convex planar solids produce cylindrical blends. Three selected
+edges meeting at a regular corner produce a spherical patch. Smooth closed rims
+use numerical intersections of the adjoining surfaces' inward radius offsets;
+contact curves remain exact evaluators and respect source sampling overrides.
+No circle-specific formulas or mesh replacement solids are used. At a radius
+limit, zero-area faces and edges disappear and coincident rails are shared.
+For example:
+
+```ts
+const cylinder = sketch().add(circle({ center, radius: 1 })).extrude({ length: 2 });
+const sphere = cylinder.round({ radius: 1 });
+const tube = sketch().add(circle({ center, radius: 3 }), circle({ center, radius: 1 }))
+  .extrude({ length: 2 });
+const torus = round({ solid: tube, radius: 1 });
+```
+
+The supported inputs are convex planar solids with one or three selected edges at
+each affected three-face corner, or smooth closed rims with regular adjoining
+surface charts. Single-edge ends must meet perpendicular planar caps. Open curved
+corners, two-edge corner junctions, nonconvex edges, mixed curved/straight corner
+trims, overlaps, and unresolved offset intersections throw explicitly. Geometry
+is checked for shared manifold topology and a closed, consistently oriented,
+non-self-intersecting sampled mesh before the result is returned.
+
 `TrimmedSurface` and `trimmedSurface` retain the source `SpatialSurface` and a
 chart mapping [0, 1]² into its retained parameter region. Curved chart sides and
 periodic annuli are supported, with shared physical boundaries and no seam edges.

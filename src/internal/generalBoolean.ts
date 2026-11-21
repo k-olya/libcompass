@@ -161,7 +161,16 @@ export function generalBoolean(solid: Solid, tool: Solid, operation: 'intersect'
         override sample(options: { resolution?: number } = {}): Vertex[] {
           const own = super.sample(options).map((point, i, points) => sampleParameter(this, point, i, points.length)!);
           const source = [...parameterizedSamples(curve, options).map(({ t }) => t), ...(requested.get(curve) ?? [])].map(t => (t - start) / (end - start)).filter(t => t > 1e-10 && t < 1 - 1e-10);
-          return [...own, ...source].sort((a, b) => a - b).filter((t, i, all) => !i || t - all[i - 1] > 1e-10).map(t => this.at(t));
+          const values = [...own, ...source].sort((a, b) => a - b).filter((t, i, all) => !i || t - all[i - 1] > 1e-10);
+          // Chart events refined on different surfaces may coincide within the
+          // sewing tolerance. Keep canonical endpoints instead of tiny slivers.
+          const samples = [this.start];
+          for (const t of values.filter(t => t > 0 && t < 1)) {
+            const point = this.at(t);
+            if (vec3.distance(point.position, samples.at(-1)!.position) > tolerance && vec3.distance(point.position, this.end.position) > tolerance) samples.push(point);
+          }
+          samples.push(this.end);
+          return samples;
         }
       }
       let boundary: SpatialBoundary = curve instanceof Edge ? new Edge({ start: first, end: last }) : new Trim({ at: t => t === 0 ? first : t === 1 ? last : curve.at(start + (end - start) * t), start: first, end: last });
@@ -171,6 +180,18 @@ export function generalBoolean(solid: Solid, tool: Solid, operation: 'intersect'
         && parameterizedSamples(boundary).every(({ point }) => vec3.distance(point.position, other.at(curveParameter(other, point.position)).position) <= tolerance));
       if (existing) { boundary = existing; parameter = t => curveParameter(curve, existing.at(t).position); local = t => curveParameter(existing, curve.at(t).position); }
       else canonical.push(boundary);
+      // Share one parameter for a sewn event as well as one vertex. Otherwise
+      // independent UV refinements request duplicate near-identical mesh points.
+      const samples = parameterizedSamples(boundary), sourceLocal = local;
+      local = value => {
+        const t = sourceLocal(value), point = boundary.at(t).position;
+        let result = t, nearest = Infinity;
+        for (const sample of samples) {
+          const delta = Math.abs(sample.t - t);
+          if (delta < nearest && vec3.distance(sample.point.position, point) <= tolerance) { result = sample.t; nearest = delta; }
+        }
+        return result;
+      };
       list.push({ start, end, boundary, parameter, local });
     }
     pieces.set(curve, list);

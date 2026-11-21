@@ -21,14 +21,16 @@ export function regionMesh(region: SurfaceRegion, context: Tessellation): Float3
         let entries = parameters.flatMap((t, i) => t >= (trim.start ?? 0) - 1e-10 && t <= (trim.end ?? 1) + 1e-10
           ? [{ uv: trim.at(t), point: samples[i] }] : []);
         if (trim.reversed) entries = entries.reverse();
-        return { trim, entries };
+        const seam = (['x', 'y'] as const).some((axis, i) => (i ? region.surface.periodicV : region.surface.periodicU)
+          && entries.length > 0 && [0, 1].some(value => entries.every(entry => entry.uv[axis] === value)));
+        return { trim, entries, seam };
       });
       // Chart seams and physical trims meet at the same mathematical point.
       // Use the shared physical sample at that corner, including across seams;
       // reevaluation can differ by roundoff (for example cos(PI / 2) versus 0).
       return segments.flatMap(({ trim, entries }, i) => {
         const previous = segments[(i + segments.length - 1) % segments.length];
-        if (trim.physical === false && previous.trim.physical !== false && entries.length) entries[0].point = previous.entries.at(-1)!.point;
+        if (trim.physical === false && (previous.trim.physical !== false || previous.seam) && entries.length) entries[0].point = previous.entries.at(-1)!.point;
         const retained = entries.slice(0, -1);
         points.push(...retained); return retained.map(entry => entry.uv);
       });

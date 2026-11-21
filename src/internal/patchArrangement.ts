@@ -90,6 +90,18 @@ export function patchArrangement(patch: ParametricPatch, additional: readonly Pa
       first.twin = second; from.outgoing.push(first); to.outgoing.push(second); halves.push(first, second); pairs.set(key, first);
     }
   }
+  // Finite intersections can end inside the extended analysis chart without
+  // dividing a face. Remove dangling branches before walking area boundaries.
+  const dangling = nodes.filter(node => node.outgoing.length === 1), discarded = new Set<Half>();
+  for (let i = 0; i < dangling.length; i++) {
+    const node = dangling[i];
+    if (node.outgoing.length !== 1) continue;
+    const half = node.outgoing.pop()!, other = half.to;
+    discarded.add(half); discarded.add(half.twin);
+    other.outgoing.splice(other.outgoing.indexOf(half.twin), 1);
+    if (other.outgoing.length === 1) dangling.push(other);
+  }
+  for (let i = halves.length - 1; i >= 0; i--) if (discarded.has(halves[i])) halves.splice(i, 1);
   const angleRAD = (half: Half): number => {
     const t = half.reversed ? half.end : half.start, next = half.path.at(t + (half.reversed ? -1 : 1) * Math.min((half.end - half.start) / 10, 1e-5));
     return Math.atan2(next.y - half.from.point.y, next.x - half.from.point.x);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { vec3 } from 'gl-matrix';
-import { circle, extrude, extrudeCut, lineSegment, plane, sketch, solid, spatialSurface,
+import { circle, centerRectangle, extrude, extrudeCut, lineSegment, plane, sketch, solid, spatialSurface,
   SurfaceRegion, ZX, setTriangulationResolution } from 'libcompass';
 import { validateSweepMesh } from '../dist/internal/validateSweepMesh.js';
 import { BooleanMesh } from '../dist/internal/booleanMesh.js';
@@ -125,6 +125,35 @@ test('a radial cut through an annular wall sews periodic chart seams without phy
       assert.equal(cut.boundaries.length, 6);
       assert.ok(cut.boundaries.every(boundary => boundary.isLoop()));
       assert.equal(walls.triangulate(), cached);
+    }
+  } finally { setTriangulationResolution(0.025); }
+});
+
+test('drafted rectangular pockets in annular walls retain exact surfaces and sewn seams', () => {
+  try {
+    for (const resolution of [0.0128, 0.01]) {
+      setTriangulationResolution(resolution);
+      const center = { x: 0, y: 0 };
+      const base = sketch().add(circle({ center, radius: 6 })).extrude({ length: 2 }).chamfer({ boundaries: [0] });
+      const walls = sketch({ plane: base.surfaces[1] }).add(circle({ center, radius: 6 }), circle({ center, radius: 5 })).extrude({ length: 3 });
+      const cached = walls.triangulate(), bytes = cached.slice();
+      const cutter = sketch({ plane: ZX.displace({ vector: [0, 4.8, 0] }) })
+        .add(centerRectangle({ center: { x: 3.5, y: 0 }, corner: { x: 2, y: 1 } }));
+      for (const angle of [-45, -0.1, 0.1, 45]) {
+        const cut = walls.extrudeCut({ sketch: cutter, length: 0.6, angle });
+        const mesh = new BooleanMesh(cut.triangulate());
+        assert.ok(volume(cut) > 0);
+        assert.equal(mesh.contains([0, 5.2, 3.5]), false, 'Pocket material must be removed');
+        assert.equal(mesh.contains([0, 5.8, 3.5]), true, 'The blind cut must leave the outer wall');
+        assert.equal(mesh.contains([0, -5.5, 3.5]), true, 'The opposite wall must stay intact');
+        assert.equal(mesh.contains([0.85, 5.2, 3.5]), angle === -45, 'The pocket must follow the drafted wall');
+        for (const [source, radius] of [[walls.surfaces[2], 6], [walls.surfaces[3], 5]]) {
+          const wall = cut.surfaces.find(surface => surface instanceof SurfaceRegion && surface.surface === source);
+          assert.ok(wall, 'Cylinders must retain their original mathematical evaluators');
+          close(Math.hypot(...wall.at(0.37, 0.43).position.slice(0, 2)), radius, 1e-10);
+        }
+        assert.equal(walls.triangulate(), cached); assert.deepEqual(cached, bytes);
+      }
     }
   } finally { setTriangulationResolution(0.025); }
 });

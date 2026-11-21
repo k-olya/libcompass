@@ -158,7 +158,11 @@ export function triangulatePolygon(loops: readonly Loop[], precision = 1e-10): n
       changed = false;
       for (let i = 0; i < indices.length && indices.length > 3; i++) {
         const previous = points[indices[(i + indices.length - 1) % indices.length]], current = points[indices[i]], next = points[indices[(i + 1) % indices.length]];
-        if (onSegment(previous, next, current, tolerance.length, tolerance.area)) { indices.splice(i--, 1); changed = true; }
+        const dx = next.x - previous.x, dy = next.y - previous.y;
+        const projection = (current.x - previous.x) * dx + (current.y - previous.y) * dy;
+        if (Math.abs(cross(previous, next, current)) <= tolerance.area && projection >= 0 && projection <= dx * dx + dy * dy) {
+          indices.splice(i--, 1); changed = true;
+        }
       }
     }
     return indices;
@@ -173,20 +177,32 @@ export function triangulatePolygon(loops: readonly Loop[], precision = 1e-10): n
   const used = new Set(triangles);
   points.forEach((point, index) => {
     if (used.has(index)) return;
-    let inserted = false;
-    const result: number[] = [];
+    const key = (a: number, b: number) => a < b ? `${a},${b}` : `${b},${a}`;
+    const edges = new Map<string, number>();
     for (let i = 0; i < triangles.length; i += 3) {
-      const triangle = triangles.slice(i, i + 3);
-      const edge = triangle.findIndex((a, j) => onSegment(points[a], points[triangle[(j + 1) % 3]], point, tolerance.length, tolerance.area));
-      if (edge === -1) result.push(...triangle);
-      else {
-        const a = triangle[edge], b = triangle[(edge + 1) % 3], c = triangle[(edge + 2) % 3];
-        result.push(a, index, c, index, b, c);
-        inserted = true;
+      for (let j = 0; j < 3; j++) {
+        const edge = key(triangles[i + j], triangles[i + (j + 1) % 3]);
+        edges.set(edge, (edges.get(edge) ?? 0) + 1);
       }
     }
-    if (!inserted) throw new RangeError('Triangulation omitted a boundary vertex');
-    triangles = result;
+    // Restore a boundary vertex on its closest boundary edge only. Matching
+    // every nearby triangle edge creates overlapping slivers at shallow cuts.
+    let selected: { offset: number; edge: number } | undefined, nearest = Infinity;
+    for (let i = 0; i < triangles.length; i += 3) for (let j = 0; j < 3; j++) {
+      const first = triangles[i + j], last = triangles[i + (j + 1) % 3];
+      if (edges.get(key(first, last)) !== 1) continue;
+      const a = points[first], b = points[last], dx = b.x - a.x, dy = b.y - a.y, length = Math.hypot(dx, dy);
+      const t = ((point.x - a.x) * dx + (point.y - a.y) * dy) / (length * length);
+      if (t <= 0 || t >= 1) continue;
+      const distance = Math.abs(cross(a, b, point)) / length;
+      if (distance <= Math.max(tolerance.length, tolerance.area / length) && distance < nearest) {
+        selected = { offset: i, edge: j }; nearest = distance;
+      }
+    }
+    if (!selected) throw new RangeError('Triangulation omitted a boundary vertex');
+    const triangle = triangles.slice(selected.offset, selected.offset + 3), j = selected.edge;
+    const a = triangle[j], b = triangle[(j + 1) % 3], c = triangle[(j + 2) % 3];
+    triangles.splice(selected.offset, 3, a, index, c, index, b, c);
     used.add(index);
   });
   let area = 0;

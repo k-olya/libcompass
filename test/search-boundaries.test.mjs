@@ -68,7 +68,7 @@ test('chamfer and round operation/method forms resolve mixed selectors exactly a
   for (const operation of [chamfer, round]) {
     const name = operation === chamfer ? 'chamfer' : 'round';
     const expected = operation({ solid, boundaries: [index] }).triangulate();
-    for (const boundaries of [[boundary], [cap], [index, boundary, cap, ({ face }) => face === cap]]) {
+    for (const boundaries of [index, boundary, cap, ({ face }) => face === cap, [boundary], [cap], [index, boundary, cap, ({ face }) => face === cap]]) {
       const result = operation({ solid, boundaries });
       assert.deepEqual(result.triangulate(), expected);
       assert.deepEqual(solid[name]({ boundaries }).triangulate(), expected);
@@ -81,7 +81,7 @@ test('an unmatched nonempty selector is a nonmutating no-op, never a request to 
   const solid = cube(), child = node(); solid.add(child);
   const cached = solid.triangulate(), before = cached.slice();
   for (const operation of [chamfer, round]) {
-    const copy = operation({ solid, boundaries: [() => false] });
+    const copy = operation({ solid, boundaries: () => false });
     assert.notEqual(copy, solid);
     assert.deepEqual(copy.surfaces, solid.surfaces);
     assert.deepEqual(copy.children, [child]); assert.notEqual(copy.children, solid.children);
@@ -92,6 +92,13 @@ test('an unmatched nonempty selector is a nonmutating no-op, never a request to 
   let called = false;
   assert.deepEqual(searchBoundaries({ solid: empty, boundaries: [() => { called = true; return true; }] }), []);
   assert.equal(called, false);
+});
+
+test('single indices, boundaries, faces and predicates resolve identically to one-element lists', () => {
+  const solid = cube();
+  for (const selector of [0, solid.boundaries.at(-1), solid.surfaces[0], ({ boundary }) => boundary.start.position[2] === 0, () => false]) {
+    assert.deepEqual(searchBoundaries({ solid, boundaries: selector }), searchBoundaries({ solid, boundaries: [selector] }));
+  }
 });
 
 test('invalid indices, foreign topology, malformed selectors and predicate errors are explicit', () => {

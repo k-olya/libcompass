@@ -105,12 +105,12 @@
 - Chamfer returns a new solid, retaining child node identities in a new child
   array. Never mutate input coordinates, topology, child lists, or memo caches.
   Resolve boundary selections through the shared `searchBoundaries` operation:
-  lists mix original boundary indices/objects, this solid's planar Face objects
+  accept one selector or a mixed list of original boundary indices/objects, this solid's planar Face objects
   (including hole boundaries), and predicates. Test each boundary with every
   adjoining planar Face; any match includes it. If there is no adjoining Face,
   call once with `face: undefined`. Deduplicate results by identity, preserve
   first-match order, reject foreign topology, and exclude child nodes. Omitted
-  or empty lists select all; a nonempty list with no matches selects none.
+  or empty lists select all; a selector or nonempty list with no matches selects none.
   Round uses the same selector types and helper. Setback and angle reference the first adjoining surface in
   solid.surfaces order. Curved trims retain the source evaluator through a
   TrimmedSurface chart and share exact rails with the bevel. Respect source
@@ -189,6 +189,19 @@
 
 The tree-based API is retained but development is on hold. The following rules
 apply only to those node classes:
+
+- AnnotatedNode extends Memo and adds name, color, and alpha. Omitted names
+  become mesh1, mesh2, ... from a hidden module counter; only successful unnamed
+  constructions increment it. Alpha defaults to 1. Color defaults to 'default'
+  from the immutable 16-entry `colors` palette and accepts only palette names
+  or #RGB/#RRGGBB strings, including property assignments. Resolve names to hex;
+  do not accept arbitrary CSS names/functions or RGB numbers.
+  `annotate({ solid, name?, color?, alpha? })` and `solid.annotate()`
+  create a new wrapper retaining the original solid. Annotations do not alter
+  geometry or STL exports. The app renders nearest-annotated subtrees separately,
+  excluding nested annotated geometry from ancestor meshes. Keep own triangles
+  before child triangles in insertion order so world-space mesh ranges retain
+  transforms and shared child occurrences without duplicating geometry.
 
 - Every node class that produces actual triangle geometry must inherit from
   `Memo`, directly or indirectly.

@@ -15,6 +15,9 @@ import type { Vertex } from './Vertex.js';
 import { rigidCopies } from './internal/rigidContext.js';
 import { TransformMat4 } from './TransformMat4.js';
 import type { BoundarySelector } from './operations/searchBoundaries.js';
+import { annotate } from './operations/annotate.js';
+import type { AnnotatedNode } from './AnnotatedNode.js';
+import type { AnnotationColor } from './defaults/colors.js';
 
 /**
  * A memoized scene node retaining exact planar and spatial surfaces.
@@ -51,6 +54,23 @@ export class Solid extends Memo {
   }
 
   /**
+   * Wrap this solid in a new memoized group with preview annotations.
+   * @param options.name - Preview mesh name; omitted names use a hidden mesh1, mesh2, ... counter.
+   * @param options.color - Palette name or #RGB/#RRGGBB string; defaults to 'default'.
+   * @param options.alpha - Opacity in [0, 1]; defaults to 1.
+   * @returns An AnnotatedNode retaining this solid unchanged as its child.
+   * @see {@link annotate}
+   */
+  annotate(options: {
+    /** Preview mesh name; omitted names use the hidden mesh1, mesh2, ... counter. */
+    name?: string;
+    /** Palette name or #RGB/#RRGGBB string; defaults to 'default'. */
+    color?: AnnotationColor;
+    /** Opacity in [0, 1]; defaults to 1. */
+    alpha?: number;
+  } = {}): AnnotatedNode { return annotate({ ...options, solid: this }); }
+
+  /**
    * Return a new rotated solid; leave this object unchanged.
    * @param options.axis - Spatial line defining the rotation origin and direction.
    * @param options.angle - Signed right-hand rotation in degrees.
@@ -81,7 +101,7 @@ export class Solid extends Memo {
    * @param options.angle - Angle in degrees from that surface toward the material;
    * strictly between 0 and 90, default 45.
    * @param options.boundaries - Indices, boundary objects, planar faces, or predicates
-   * resolved by {@link searchBoundaries}; omitted or empty means all.
+   * resolved by {@link searchBoundaries}, as one selector or a list; omitted or [] means all.
    * @returns A new solid retaining the original child nodes in a new child array.
    * @throws {@link RangeError} for invalid options, oversized bevels, or unresolved intersections.
    * @see {@link chamfer}
@@ -91,15 +111,15 @@ export class Solid extends Memo {
     length?: number;
     /** Angle in degrees; defaults to 45. */
     angle?: number;
-    /** Mixed selectors resolved by searchBoundaries; omitted or empty means all. */
-    boundaries?: readonly BoundarySelector[];
+    /** One selector or a mixed list resolved by searchBoundaries; omitted or [] means all. */
+    boundaries?: BoundarySelector | readonly BoundarySelector[];
   } = {}): Solid { return chamfer({ ...options, solid: this }); }
 
   /**
    * Return a new rounded solid, leaving this solid and its cached mesh unchanged.
    * @param options.radius - Positive tangent-round radius; defaults to 0.5 model units.
    * @param options.boundaries - Indices, boundary objects, planar faces, or predicates
-   * resolved by {@link searchBoundaries}; omitted or empty means all.
+   * resolved by {@link searchBoundaries}, as one selector or a list; omitted or [] means all.
    * @returns A new solid retaining child node identities in a fresh array.
    * @throws {@link RangeError} for invalid options or unsupported/unresolved rounds.
    * @see {@link round}
@@ -107,8 +127,8 @@ export class Solid extends Memo {
   round(options: {
     /** Positive radius in model units; defaults to 0.5. */
     radius?: number;
-    /** Mixed selectors resolved by searchBoundaries; omitted or empty means all. */
-    boundaries?: readonly BoundarySelector[];
+    /** One selector or a mixed list resolved by searchBoundaries; omitted or [] means all. */
+    boundaries?: BoundarySelector | readonly BoundarySelector[];
   } = {}): Solid { return round({ ...options, solid: this }); }
 
   /**

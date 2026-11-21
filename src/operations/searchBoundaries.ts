@@ -19,7 +19,7 @@ export type BoundarySelector = number | SpatialBoundary | Face | BoundaryPredica
  * Find unique original boundaries using mixed topology selectors.
  * @param options.solid - Solid whose own boundaries and planar faces are searched.
  * @param options.boundaries - Boundary indices, boundary objects, planar Face
- * objects, and predicates. Omitted or empty selects all boundaries. Face selectors
+ * objects, and predicates, as one selector or a mixed list. Omitted or [] selects all boundaries. Face selectors
  * include outer and hole boundaries. Objects must belong to the input solid.
  * @remarks
  * Each predicate is called for every boundary with each adjoining planar Face.
@@ -29,7 +29,7 @@ export type BoundarySelector = number | SpatialBoundary | Face | BoundaryPredica
  * @returns Original boundary objects, deduplicated by identity in first-match
  * order. A nonempty selection with no matches returns an empty array.
  * @throws {@link TypeError} if solid is invalid or a predicate returns a nonboolean.
- * @throws {@link RangeError} if the list, an index, or a topology object is invalid.
+ * @throws {@link RangeError} if a selector, index, or topology object is invalid.
  * Predicate exceptions propagate unchanged; the helper does not modify geometry.
  * @example
  * ```ts
@@ -44,19 +44,19 @@ export type BoundarySelector = number | SpatialBoundary | Face | BoundaryPredica
 export function searchBoundaries({ solid, boundaries = [] }: {
   /** Input solid; never modified. */
   solid: Solid;
-  /** Mixed boundary selectors; omitted or empty means all boundaries. */
-  boundaries?: readonly BoundarySelector[];
+  /** One selector or a mixed list; omitted or [] means all boundaries. */
+  boundaries?: BoundarySelector | readonly BoundarySelector[];
 }): SpatialBoundary[] {
   if (!(solid instanceof Solid)) throw new TypeError('Boundary search requires a Solid');
-  if (!Array.isArray(boundaries)) throw new RangeError('Boundary selectors must be an array');
-  if (!boundaries.length) return [...solid.boundaries];
+  const selectors: readonly BoundarySelector[] = Array.isArray(boundaries) ? boundaries : [boundaries as BoundarySelector];
+  if (!selectors.length) return [...solid.boundaries];
   const available = new Set(solid.boundaries), selected = new Set<SpatialBoundary>();
   const adjoining = new Map<SpatialBoundary, Set<Face>>();
   for (const face of solid.surfaces) if (face instanceof Face) for (const boundary of face.boundaries) {
     if (!adjoining.has(boundary)) adjoining.set(boundary, new Set());
     adjoining.get(boundary)!.add(face);
   }
-  for (const selector of boundaries) {
+  for (const selector of selectors) {
     if (typeof selector === 'number') {
       if (!Number.isInteger(selector) || selector < 0 || selector >= solid.boundaries.length) {
         throw new RangeError('Boundary indices must be valid indices in solid.boundaries');

@@ -12,7 +12,7 @@ import { searchBoundaries, type BoundarySelector } from './searchBoundaries.js';
  * @param options.solid - Input solid; its geometry, children and cached mesh are unchanged.
  * @param options.radius - Positive rolling-ball radius in model units; defaults to 0.5.
  * @param options.boundaries - Mixed original boundary indices/objects, planar
- * faces of the solid, and predicates accepted by {@link searchBoundaries}.
+ * faces of the solid, and predicates accepted by {@link searchBoundaries}, as one selector or a list.
  * Omitted or [] selects all. Matches are unique by identity.
  * @remarks
  * Rounds retain mathematical surfaces and shared exact contact curves. Three rounded
@@ -33,8 +33,8 @@ export function round({ solid, radius = 0.5, boundaries = [] }: {
   solid: Solid;
   /** Positive radius in model units; defaults to 0.5. */
   radius?: number;
-  /** Mixed selectors resolved by searchBoundaries; omitted or empty means all. */
-  boundaries?: readonly BoundarySelector[];
+  /** One selector or a mixed list resolved by searchBoundaries; omitted or [] means all. */
+  boundaries?: BoundarySelector | readonly BoundarySelector[];
 }): Solid {
   if (!(solid instanceof Solid)) throw new TypeError('Round requires a Solid');
   if (!Number.isFinite(radius) || radius <= 0) throw new RangeError('Round radius must be finite and positive');

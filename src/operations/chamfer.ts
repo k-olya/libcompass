@@ -17,7 +17,7 @@ import { searchBoundaries, type BoundarySelector } from './searchBoundaries.js';
  * @param options.angle - Angle in degrees from that surface toward the material;
  * strictly between 0 and 90, default 45.
  * @param options.boundaries - Mixed original boundary indices/objects, planar
- * faces of the solid, and predicates accepted by {@link searchBoundaries}.
+ * faces of the solid, and predicates accepted by {@link searchBoundaries}, as one selector or a list.
  * Omit or pass [] to chamfer all boundaries. Matches are unique by identity.
  * @remarks
  * Curved rims retain their evaluators and trim the adjoining surface charts.
@@ -41,8 +41,8 @@ export function chamfer({ solid, length = 0.5, angle: angleDEG = 45, boundaries 
   length?: number;
   /** Angle from that surface in degrees; defaults to 45. */
   angle?: number;
-  /** Mixed selectors resolved by searchBoundaries; omitted or empty means all. */
-  boundaries?: readonly BoundarySelector[];
+  /** One selector or a mixed list resolved by searchBoundaries; omitted or [] means all. */
+  boundaries?: BoundarySelector | readonly BoundarySelector[];
 }): Solid {
   if (!(solid instanceof Solid)) throw new TypeError('Chamfer requires a Solid');
   if (!Number.isFinite(length) || length <= 0) throw new RangeError('Chamfer length must be finite and positive');

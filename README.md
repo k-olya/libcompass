@@ -178,7 +178,8 @@ to the original solid; omit them or pass `[]` for all boundaries. No source
 geometry, child nodes or cached triangulations are modified.
 
 Both operations and their solid methods use
-`searchBoundaries({ solid, boundaries })`. Each list entry may be an index in
+`searchBoundaries({ solid, boundaries })`. Pass one selector or a mixed list.
+Each selector may be an index in
 `solid.boundaries`, a boundary object from that array, a planar `Face` from
 `solid.surfaces`, or a predicate `({ solid, face, boundary }) => boolean`.
 A face expands to all its outer and hole boundaries. Predicates test every
@@ -189,7 +190,7 @@ For a boundary adjoining only curved surfaces, the predicate runs once with
 The helper returns the original boundary objects, unique by identity and in
 first-match order. Indices and objects must belong to the input solid's own
 topology; child solids are excluded. Invalid selectors and nonboolean predicate
-results throw. A nonempty list with no matches selects nothing: chamfer and round
+results throw. A selector or nonempty list with no matches selects nothing: chamfer and round
 return a fresh solid with unchanged geometry. Omitted or empty lists select all.
 `BoundarySelector` and `BoundaryPredicate` are exported types.
 
@@ -199,9 +200,10 @@ const selected = searchBoundaries({ solid: part, boundaries: [
   0, part.boundaries[0], cap, // Overlapping selections are deduplicated.
   ({ face }) => face !== undefined && face.plane.normal[2] > 0.9,
 ] });
-const beveled = part.chamfer({ length: 0.5, boundaries: [
-  ({ boundary }) => boundary.start.position[2] > 5,
-] });
+const beveled = part.chamfer({
+  length: 0.5,
+  boundaries: ({ boundary }) => boundary.isLoop(),
+});
 ```
 
 Straight edges of convex planar solids produce cylindrical blends. Three selected
@@ -353,7 +355,7 @@ converts to radians. Conversions preserve negative angles and multiple turns;
 they do not wrap or clamp. For example, `degtorad(45)` equals `PI / 4`.
 
 Every concrete class also has a lowercase constructor shorthand, exported from the root
-and its class module: `node`, `memo`, `transform`, `transformMat4Node`, `line`,
+and its class module: `node`, `memo`, `annotatedNode`, `transform`, `transformMat4Node`, `line`,
 `lineSegment`, `circle`, `plane`, `sketch`, `edge`, `face`, `solid`,
 `planarCurve`, `spatialCurve`, `spatialSurface`, and `ruledSurface`. They return
 ordinary class instances and accept the same options and defaults. The name
@@ -772,6 +774,40 @@ retained by the existing transformations.
 geometry-producing node subclasses override `triangulateUncached()`. `Transform`
 exposes XYZ `position`, `rotation` (degrees, XYZ Euler order), and `scale` objects.
 Sketches, planes, vertices, edges, curves, and surfaces remain independent math objects.
+
+`AnnotatedNode` extends `Memo` with mutable `name`, `color`, and `alpha` display
+properties. Omitted names become `mesh1`, `mesh2`, ... using a hidden built-in
+counter. Only successful unnamed constructions increment it; explicit names do
+not. The counter persists for the loaded library instance. Color defaults to
+`'default'`, preserving the original gold (`#d2a568`), and alpha defaults to `1`.
+Alpha ranges from `0` (invisible) to `1` (opaque). Use the constructor or
+`annotatedNode(options)` for a general group, or wrap a solid with
+`annotate({ solid, name?, color?, alpha? })` / `solid.annotate(options)`.
+The wrapper retains the original solid without changing its geometry, topology,
+children, or cached mesh. Annotation edits alone do not invalidate geometry.
+
+```ts
+scene.add(body.annotate({ name: 'Housing', color: '#5599dd', alpha: 0.6 }));
+const assembly = annotatedNode({ name: 'Assembly', color: colors.amber }).add(body, extension);
+scene.add(assembly);
+```
+
+`colors` is an immutable palette of 16 theme colors: `default`, `red`, `orange`,
+`amber`, `yellow`, `lime`, `green`, `teal`, `cyan`, `blue`, `indigo`, `violet`,
+`purple`, `pink`, `rose`, and `gray`. Pass a name (`color: 'blue'`), its constant
+(`color: colors.blue`), or a custom `#RGB` / `#RRGGBB` string. Names resolve to
+hex strings, which are returned by `node.color`. Other CSS names/functions,
+numeric colors, and hex strings containing alpha are rejected, including when
+assigning `node.color`. Use the separate `alpha` property for opacity.
+`AnnotationColor` is the exported option/assignment type.
+
+The compassts viewer renders each nonempty annotated subtree as a separate named
+Three.js mesh with its own color and opacity. Nested annotations control their
+own subtrees; their geometry is excluded from ancestor meshes. Unannotated
+descendants share the nearest annotation, while other geometry keeps the default
+material. Each repeated child occurrence retains its own placement. Full scene
+triangulation and STL export still include all geometry, even at alpha zero,
+without changing coordinates or duplicating triangles for nested annotations.
 
 Use `node.add(first, second)` to append children and `node.remove(first, second)`
 to remove child objects by identity. Both methods return the node for chaining.

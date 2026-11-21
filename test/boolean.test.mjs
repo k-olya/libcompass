@@ -99,13 +99,10 @@ test('curved cutter walls remain mathematical for through cuts, blind pockets an
   check(difference({ solid: a, tool: contained }), 1000 - 2 * Math.PI, 0.1);
 });
 
-test('invalid inputs and unsupported curved intersections throw without changing operands', () => {
+test('invalid inputs throw without changing operands', () => {
   const a = box(), cached = a.triangulate();
   assert.throws(() => difference({ solid: a, tool: {} }), TypeError);
   assert.throws(() => intersect({ solid: a, tool: solid({ surfaces: [a.surfaces[0]] }) }), /closed/);
-  const first = extrude({ sketch: roundSketch(), length: 10 });
-  const second = extrude({ sketch: sketch().add(circle({ center: { x: 6, y: 5 }, radius: 1 })), length: 10 });
-  assert.throws(() => difference({ solid: first, tool: second }), /curved surface/);
   assert.throws(() => a.extrudeCut({ sketch: roundSketch(), length: 0 }), /length/);
   assert.equal(a.triangulate(), cached);
 });

@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TRIANGULATION_RESOLUTION, setTriangulationResolution, circle, sketch, SpatialCurve, extrudeAlongCurve } from 'libcompass';
 
-test('resolution defaults to 0.1 and changing it updates sampling on retained curves', () => {
-  assert.equal(TRIANGULATION_RESOLUTION, 0.1);
+test('resolution defaults to 0.0128 and changing it updates sampling on retained curves', () => {
+  assert.equal(TRIANGULATION_RESOLUTION, 0.0128);
   const curve = circle({ center: { x: 0, y: 0 }, radius: 1 });
   const original = curve.sample();
   try {
@@ -17,9 +17,9 @@ test('resolution defaults to 0.1 and changing it updates sampling on retained cu
       assert.throws(() => setTriangulationResolution(resolution), RangeError);
       assert.equal(TRIANGULATION_RESOLUTION, 1);
     }
-    setTriangulationResolution(0.1);
+    setTriangulationResolution(0.0128);
     assert.deepEqual(curve.sample(), original);
-  } finally { setTriangulationResolution(0.1); }
+  } finally { setTriangulationResolution(0.0128); }
 });
 
 test('the torus remains valid across the full resolution range with more triangles at finer settings', () => {
@@ -35,5 +35,5 @@ test('the torus remains valid across the full resolution range with more triangl
       counts.push(solid.triangulate().length / 9);
     }
     assert.ok(counts[0] < counts[1] && counts[1] < counts[2]);
-  } finally { setTriangulationResolution(0.1); }
+  } finally { setTriangulationResolution(0.0128); }
 });

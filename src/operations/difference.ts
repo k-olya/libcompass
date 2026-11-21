@@ -9,11 +9,11 @@ import { booleanSolid } from '../internal/booleanSolid.js';
  * entirely removed solid has no surfaces. Retains the first operand's child
  * nodes by identity in a fresh child array, leaving input caches unchanged.
  * @remarks
- * Exact topology/evaluators are retained. Supports planar intersections and
- * existing single-rail curved-surface/plane trims, including supported circular
- * through holes and blind pockets. General curved-surface intersections, curved
- * coincidence and multi-chart cuts throw rather than returning a mesh-only solid.
- * @throws {@link RangeError} for invalid/open inputs, unsupported intersections,
+ * Exact topology/evaluators are retained. Regular parametric surface intersections
+ * are refined against both original equations. {@link SurfaceRegion} retains
+ * arbitrary loops, holes and periodic charts, including reversed curved tool
+ * walls. Tangent/branching and unresolved arrangements throw explicitly.
+ * @throws {@link RangeError} for invalid/open inputs, unresolved intersections,
  * or a result that cannot be verified as a closed oriented solid.
  * @example
  * ```ts

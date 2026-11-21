@@ -64,6 +64,7 @@ Points and infinite lines are construction geometry and do not create boundaries
 | `new SpatialSurface({ at, boundaryLoops, sides, periodicU, periodicV, reversed })` | A general parametric surface on [0, 1]², with optional periodic directions. |
 | `new RuledSurface({ start, end, sides, reversed })` | An exact ruled patch between corresponding boundaries, or from a boundary to an apex vertex. |
 | `new TrimmedSurface({ surface, at, boundaryLoops, sides })` | A mathematical parameter chart retaining a region of an existing spatial surface. |
+| `new SurfaceRegion({ surface, regions, boundaryLoops, reversed })` | An existing parametric surface retained by arbitrary trim loops, holes and periodic chart pieces. |
 | `new TransformMat4({ matrix })` | A memoized scene node applying a gl-matrix transformation. |
 
 Constructors with arguments take a single named options object. `Plane` and
@@ -255,12 +256,14 @@ scene.add(drilled);
 
 Boolean results retain mathematical faces, curves and surface evaluators with
 shared sewn boundaries, including reversed tool surfaces lining pockets and
-enclosed cavities. This first version supports planar cuts, coplanar overlap,
-disconnected results, and supported single-rail plane/curved-surface cuts such as
-circular holes or drafted pockets lying inside a block's perimeter. Unchanged
-curved patches can also be retained or reversed. General curved surface/surface
-intersections, coincident curved walls, open curved intersection rails,
-multiple-chart trims, and unresolved surface sewing report explicit errors.
+enclosed cavities. Planar and regular parametric surface intersections support
+open cuts, closed cut loops, disconnected results and periodic seams. Curved
+intersections are refined against both surface equations; `SurfaceRegion`
+retains the original evaluator with arbitrary parameter trim loops, holes and
+multiple chart pieces. Shared rims are reused, including coincident wall regions.
+The same kernel handles `extrudeCut` and subsequent booleans on trimmed results.
+Singularities, branching/tangent intersections and unresolved surface sewing
+report explicit errors instead of returning a partial or faceted solid.
 Inputs and nonempty results must be closed, consistently oriented manifolds.
 Temporary meshes discover intersections, classify regions and validate results;
 they never become the output topology. These checks share the library's
@@ -315,7 +318,7 @@ oblique or point against the plane normal, but must have a nonzero normal compon
 
 ## Reuse the result
 
-`Solid.surfaces` contains `Face` and `SpatialSurface` instances, both extending
+`Solid.surfaces` contains `Face`, `SpatialSurface` and `SurfaceRegion` instances, all extending
 `Surface`. `Solid.boundaries` contains unique `Edge` and `SpatialCurve` objects,
 and `Solid.vertices` contains their unique topological endpoints. Neighboring
 surfaces retain the same boundary objects. Sampling never adds facets or vertices
@@ -448,7 +451,7 @@ edges. Straight extrusion does not triangulate during solid construction;
 sweep construction additionally checks a temporary validation mesh.
 
 `TRIANGULATION_RESOLUTION` is the library-wide midpoint-to-chord deviation in
-model units. It defaults to `0.1`; call `setTriangulationResolution(value)` with
+model units. It defaults to `0.0128`; call `setTriangulationResolution(value)` with
 a finite value from `0.001` to `1` inclusive to change it. Smaller values produce
 more triangles. Rerun modeling operations to rebuild the model at the new setting;
 existing memoized nodes retain their caches. Closed curves keep at least four
@@ -460,9 +463,10 @@ numbers. Changing mesh density never changes the stored mathematical geometry.
 
 Adaptive midpoint probes can miss oscillations between probes; they do not
 provide a certified global error bound for arbitrary evaluators. General spatial
-surfaces support curvature in both parameters and periodic seams. Arbitrary
-curved trimming in UV space, sketch booleans, and constraints remain outside
-the current API. Invalid trim intersections or triangulations fail
+surfaces support curvature in both parameters and periodic seams. Solid booleans
+retain arbitrary UV regions through `SurfaceRegion`; the standalone `trimSurface`
+tool currently keeps its simpler cutting-plane chart restrictions. Sketch booleans
+and constraints remain outside the current API. Invalid trim intersections or triangulations fail
 explicitly rather than producing partial meshes.
 
 ## Default objects

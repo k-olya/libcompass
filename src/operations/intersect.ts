@@ -9,10 +9,11 @@ import { booleanSolid } from '../internal/booleanSolid.js';
  * child nodes are retained by identity in a fresh child array.
  * @remarks
  * Retains exact faces, curves and surface evaluators; meshes are temporary
- * intersection/classification checks. Supports planar intersections and the
- * existing single-rail curved-surface/plane trims. General curved-surface
- * intersections and trims requiring several charts throw explicitly.
- * @throws {@link RangeError} for open, nonmanifold or invalid input, unsupported
+ * intersection/classification checks. Regular parametric surfaces intersect
+ * numerically against their original equations. Arbitrary retained trim loops,
+ * holes and periodic chart pieces use {@link SurfaceRegion}; planar patches
+ * remain faces. Tangent/branching or unresolved arrangements throw explicitly.
+ * @throws {@link RangeError} for open, nonmanifold or invalid input, unresolved
  * intersections, or a result that cannot be verified as a closed oriented solid.
  * @example
  * ```ts

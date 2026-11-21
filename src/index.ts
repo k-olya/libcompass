@@ -42,6 +42,7 @@ export { Surface } from './Surface.js';
 export { RuledSurface, ruledSurface } from './RuledSurface.js';
 export { SpatialSurface, spatialSurface, type SurfaceSides } from './SpatialSurface.js';
 export { TrimmedSurface, trimmedSurface } from './TrimmedSurface.js';
+export { SurfaceRegion, surfaceRegion, type SurfaceTrim, type SurfaceRegionChart } from './SurfaceRegion.js';
 export { TRIANGULATION_RESOLUTION, setTriangulationResolution } from './triangulation.js';
 export { X, Y, Z } from './defaults/axes.js';
 export { XY, ZX, YZ } from './defaults/planes.js';

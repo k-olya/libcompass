@@ -100,16 +100,27 @@
   normalized axis and degree draft semantics; never extend the cut implicitly.
   Preserve mathematical surfaces and sew shared exact boundary objects, reversing
   tool walls in differences. Temporary meshes may discover intersections,
-  classify regions and validate closure, never replace result surfaces. The first
-  version may reject curved surface/surface intersections, curved coincidence,
-  multi-chart cuts and unresolved topology explicitly. Do not return a partial,
-  open or faceted fallback result when sewing or validation fails.
+  classify regions and validate closure, never replace result surfaces. General
+  surface intersections refine discovery seeds against both source evaluators
+  and retain one shared SpatialCurve with a continuous parameter lift on each
+  surface. SurfaceRegion represents arbitrary retained UV loops, holes and
+  periodic chart pieces; internal chart seams are not physical boundaries.
+  Preserve source sampling overrides and split curves only at topological events,
+  not at discovery stations. Trimmed results must remain usable in later booleans.
+  Tessellate retained regions with a curvature-aware parameter metric: preserve
+  long triangles along straight surface directions instead of refining them to
+  match curved directions. Intersection discovery stations are sampling checks,
+  not mandatory output vertices; retain them only when chord deviation requires
+  it. Use geometric chord lengths for intersection parameter predictors so an
+  irregular analysis mesh does not create artificial sampling density.
+  Reject singular, branching/tangent and unresolved arrangements explicitly. Do
+  not return a partial, open or faceted result when sewing or validation fails.
 - Use the same default sampling rule for every planar or spatial curve without
   a sampling override: start with normalized parameters `[0, 0.5, 1]`. For each
   interval `[a, b]`, compare `at((a + b) / 2)` with the midpoint of the line
   segment joining `at(a)` and `at(b)`. Bisect the interval and recursively test
   both halves until this Euclidean distance is less than or equal to
-  `TRIANGULATION_RESOLUTION` (default `0.1`, configurable from `0.001` to `1`
+  `TRIANGULATION_RESOLUTION` (default `0.0128`, configurable from `0.001` to `1`
   through `setTriangulationResolution`). Closed curves retain at least four
   segments so coarse settings do not collapse their profile polylines. Resolution
   limits midpoint deviation, not segment length.

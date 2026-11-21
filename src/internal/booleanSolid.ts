@@ -5,6 +5,7 @@ import { Solid } from '../Solid.js';
 import type { SpatialBoundary } from '../SpatialBoundary.js';
 import { SpatialSurface } from '../SpatialSurface.js';
 import { Surface } from '../Surface.js';
+import { SurfaceRegion } from '../SurfaceRegion.js';
 import type { Vertex } from '../Vertex.js';
 import { BooleanMesh } from './booleanMesh.js';
 import { booleanTopology, sameBooleanBoundary, type BooleanPatch } from './booleanTopology.js';
@@ -14,6 +15,7 @@ import { surfaceFrame } from './surfaceGeometry.js';
 import { localCurve, trimFace } from './trimFace.js';
 import { trimSpatialSurface } from './trimSpatialSurface.js';
 import { validateSweepMesh } from './validateSweepMesh.js';
+import { generalBoolean } from './generalBoolean.js';
 
 const distance = (plane: Plane, point: ReadonlyVec3) => vec3.dot(vec3.subtract([0, 0, 0], point, plane.origin), plane.normal);
 
@@ -93,9 +95,21 @@ export function booleanSolid(solid: Solid, tool: Solid, operation: 'intersect' |
     return key(a) === key(b);
   })();
   if (sameMesh) return result(operation === 'intersect' ? solid.surfaces : []);
+  const finish = (surfaces: Surface[]): Solid => {
+    for (const boundary of new Set(surfaces.flatMap(surface => surface.boundaries))) if (surfaces.filter(surface => surface.boundaries.includes(boundary)).length !== 2) {
+      throw new RangeError('Boolean could not sew shared closed manifold boundaries');
+    }
+    if (surfaces.length) {
+      try { validateSweepMesh(Surface.triangulateAll(surfaces)); }
+      catch (cause) { throw new RangeError(`Boolean result validation failed: ${cause instanceof Error ? cause.message.replaceAll('Sweep', 'Solid') : cause}`, { cause }); }
+    }
+    return result(surfaces);
+  };
+  const general = () => finish(generalBoolean(solid, tool, operation, a, b, tolerance));
+  if ([...solid.surfaces, ...tool.surfaces].some(surface => surface instanceof SurfaceRegion)) return general();
   for (const first of solid.surfaces) if (first instanceof SpatialSurface) for (const second of tool.surfaces) {
     if (second instanceof SpatialSurface && mesh(first).intersects(mesh(second), tolerance)) {
-      throw new RangeError('Boolean curved surface–surface intersections or coincident curved walls require unsupported general trimming');
+      return general();
     }
   }
   const split = (source: Surface, cutters: readonly Surface[]): Surface[] => {
@@ -126,29 +140,26 @@ export function booleanSolid(solid: Solid, tool: Solid, operation: 'intersect' |
     }
     return patches;
   };
-  const selected: BooleanPatch[] = [];
-  for (const [operand, other, analysis, left] of [[solid, tool, b, true], [tool, solid, a, false]] as const) {
-    for (const surface of operand.surfaces) for (const patch of split(surface, other.surfaces)) {
-      const decisions = probes(patch).map(({ point, normal }) => {
-        const coplanar = other.surfaces.find(candidate => candidate instanceof Face && Math.abs(vec3.dot(candidate.plane.normal, normal)) > 1 - 1e-10 && onFace(candidate, point, tolerance));
-        if (coplanar instanceof Face) {
-          const same = vec3.dot(coplanar.plane.normal, normal) > 0;
-          return operation === 'intersect' ? left && same : left && !same;
-        }
-        const inside = analysis.contains(point);
-        return operation === 'intersect' || !left ? inside : !inside;
-      });
-      if (!decisions.length || decisions.some(value => value !== decisions[0])) throw new RangeError('Boolean patch classification is unresolved; additional surface intersection trimming is required');
-      if (decisions[0]) selected.push({ surface: patch, reverse: operation === 'difference' && !left });
+  try {
+    const selected: BooleanPatch[] = [];
+    for (const [operand, other, analysis, left] of [[solid, tool, b, true], [tool, solid, a, false]] as const) {
+      for (const surface of operand.surfaces) for (const patch of split(surface, other.surfaces)) {
+        const decisions = probes(patch).map(({ point, normal }) => {
+          const coplanar = other.surfaces.find(candidate => candidate instanceof Face && Math.abs(vec3.dot(candidate.plane.normal, normal)) > 1 - 1e-10 && onFace(candidate, point, tolerance));
+          if (coplanar instanceof Face) {
+            const same = vec3.dot(coplanar.plane.normal, normal) > 0;
+            return operation === 'intersect' ? left && same : left && !same;
+          }
+          const inside = analysis.contains(point);
+          return operation === 'intersect' || !left ? inside : !inside;
+        });
+        if (!decisions.length || decisions.some(value => value !== decisions[0])) throw new RangeError('Boolean patch classification is unresolved; additional surface intersection trimming is required');
+        if (decisions[0]) selected.push({ surface: patch, reverse: operation === 'difference' && !left });
+      }
     }
+    return finish(booleanTopology(selected, tolerance));
+  } catch (cause) {
+    if (!(cause instanceof RangeError)) throw cause;
+    return general();
   }
-  const surfaces = booleanTopology(selected, tolerance);
-  for (const boundary of new Set(surfaces.flatMap(surface => surface.boundaries))) if (surfaces.filter(surface => surface.boundaries.includes(boundary)).length !== 2) {
-    throw new RangeError('Boolean could not sew shared closed boundaries; this intersection requires unsupported trimming');
-  }
-  if (surfaces.length) {
-    try { validateSweepMesh(Surface.triangulateAll(surfaces)); }
-    catch (cause) { throw new RangeError(`Boolean result validation failed: ${cause instanceof Error ? cause.message.replaceAll('Sweep', 'Solid') : cause}`, { cause }); }
-  }
-  return result(surfaces);
 }

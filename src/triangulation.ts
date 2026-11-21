@@ -1,5 +1,5 @@
-/** Library-wide midpoint-to-chord deviation in model units; defaults to 0.1. Change with setTriangulationResolution(). */
-export let TRIANGULATION_RESOLUTION = 0.1;
+/** Library-wide midpoint-to-chord deviation in model units; defaults to 0.0128. Change with setTriangulationResolution(). */
+export let TRIANGULATION_RESOLUTION = 0.0128;
 
 /**
  * Set the library-wide sampling and tessellation resolution.

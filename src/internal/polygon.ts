@@ -135,7 +135,7 @@ export function validateLoops(loops: readonly Loop[]): void {
  * invalid or incorrectly nested, or a complete triangulation cannot be produced
  * at the current numeric tolerance.
  */
-export function triangulatePolygon(loops: readonly Loop[]): number[] {
+export function triangulatePolygon(loops: readonly Loop[], precision = 1e-10): number[] {
   if (loops.length === 0) throw new RangeError('A face needs an outer boundary');
   validateLoops(loops);
   const [outer, ...holes] = loops;
@@ -145,6 +145,7 @@ export function triangulatePolygon(loops: readonly Loop[]): number[] {
     }
   }
   const points = loops.flat(), tolerance = tolerances(loops);
+  tolerance.area *= precision / 1e-10; tolerance.length *= precision / 1e-10;
   // Remove numerically collinear points for ear clipping, then restore their
   // exact boundary identities below. Rotated dense straight rims otherwise
   // create roundoff-sized sliver triangles inside the earcut input.

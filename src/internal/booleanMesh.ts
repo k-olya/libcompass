@@ -16,7 +16,7 @@ function tree(triangles: Triangle[]): Tree {
   return { min, max, left: tree(triangles.slice(0, middle)), right: tree(triangles.slice(middle)) };
 }
 
-/** Triangle SAT, including coplanar contacts. Used only to discover unsupported surface intersections. */
+/** Triangle SAT, including coplanar contacts. Used only for intersection discovery. */
 function intersects(a: Triangle, b: Triangle, tolerance: number): boolean {
   const edges = (t: Triangle) => t.points.map((point, i) => sub(t.points[(i + 1) % 3], point));
   const first = edges(a), second = edges(b), na = cross(first[0], first[1]), nb = cross(second[0], second[1]);

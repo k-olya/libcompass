@@ -25,7 +25,8 @@ export class Tessellation {
     for (const item of group) {
       const requested = this.requests.get(item) ?? new Set<number>();
       const size = requested.size;
-      for (const value of values) requested.add(value);
+      const existing = this.parameters(item);
+      for (const value of values) requested.add(existing.find(t => Math.abs(t - value) < 1e-10) ?? value);
       this.requests.set(item, requested);
       if (requested.size !== size) { this.revision++; this.samples.clear(); }
     }

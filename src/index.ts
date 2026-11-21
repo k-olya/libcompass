@@ -58,6 +58,6 @@ export { SpatialSurface, spatialSurface, type SurfaceSides } from './SpatialSurf
 export { TrimmedSurface, trimmedSurface } from './TrimmedSurface.js';
 export { SurfaceRegion, surfaceRegion, type SurfaceTrim, type SurfaceRegionChart } from './SurfaceRegion.js';
 export { TRIANGULATION_RESOLUTION, setTriangulationResolution } from './triangulation.js';
-export { X, Y, Z } from './defaults/axes.js';
+export { X, Y, Z, negX, negY, negZ } from './defaults/axes.js';
 export { XY, ZX, YZ } from './defaults/planes.js';
 export { center, origin } from './defaults/points.js';

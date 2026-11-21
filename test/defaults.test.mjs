@@ -1,15 +1,19 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { vec3 } from 'gl-matrix';
-import { Circle, Plane, Sketch, SpatialLine, X, Y, Z, XY, ZX, YZ, center, origin } from 'libcompass';
-import { X as directX } from 'libcompass/defaults/axes';
+import { Circle, Plane, Sketch, SpatialLine, X, Y, Z, negX, negY, negZ, XY, ZX, YZ, center, origin } from 'libcompass';
+import { X as directX, negX as directNegX } from 'libcompass/defaults/axes';
 import { ZX as directZX } from 'libcompass/defaults/planes';
 
 test('default axes are zero-origin unit spatial lines usable by gl-matrix', () => {
   assert.deepEqual(Array.from(X), [1, 0, 0]);
   assert.deepEqual(Array.from(Y), [0, 1, 0]);
   assert.deepEqual(Array.from(Z), [0, 0, 1]);
-  for (const axis of [X, Y, Z]) {
+  assert.deepEqual(Array.from(negX), [-1, 0, 0]);
+  assert.deepEqual(Array.from(negY), [0, -1, 0]);
+  assert.deepEqual(Array.from(negZ), [0, 0, -1]);
+  assert.equal(directNegX, negX);
+  for (const axis of [X, Y, Z, negX, negY, negZ]) {
     assert.ok(axis instanceof SpatialLine);
     assert.deepEqual(axis.origin, [0, 0, 0]);
   }

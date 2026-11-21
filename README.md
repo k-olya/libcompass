@@ -584,12 +584,16 @@ Shared defaults live in `src/defaults/` and are exported from the root:
 | `X` | Zero-origin unit spatial line `[1, 0, 0]` | — |
 | `Y` | Zero-origin unit spatial line `[0, 1, 0]` | — |
 | `Z` | Zero-origin unit spatial line `[0, 0, 1]` | — |
+| `negX` | Zero-origin unit spatial line `[-1, 0, 0]` | — |
+| `negY` | Zero-origin unit spatial line `[0, -1, 0]` | — |
+| `negZ` | Zero-origin unit spatial line `[0, 0, -1]` | — |
 | `XY` | Plane at the world origin, local axes +X / +Y | +Z |
 | `ZX` | Plane at the world origin, local axes +Z / +X | +Y |
 | `YZ` | Plane at the world origin, local axes +Y / +Z | +X |
 
-These are ready-to-use values. `X`, `Y`, and `Z` are unit `SpatialLine` instances
-with origin `[0, 0, 0]`, compatible with gl-matrix vec3 inputs and extrusion axes.
+These are ready-to-use values. `X`, `Y`, `Z`, `negX`, `negY`, and `negZ` are unit
+`SpatialLine` instances with origin `[0, 0, 0]`, compatible with gl-matrix vec3
+inputs and extrusion axes.
 Treat the shared lines, their origins, and the default planes as immutable.
 
 ```ts

@@ -12,9 +12,11 @@
 - Put shared default objects in `src/defaults/` and re-export them from the root.
   Defaults are instances or values, not constructor shorthands. Treat shared
   defaults and their coordinate arrays as immutable. Plane names specify local
-  axis order: `XY` uses X/Y, `ZX` uses Z/X, and `YZ` uses Y/Z. `X`, `Y`, and `Z`
-  are unit `SpatialLine` instances with zero origins. SpatialLine is a vec3-compatible
-  direction array with a copied origin; an extrusion ignores its origin.
+  axis order: `XY` uses X/Y, `ZX` uses Z/X, and `YZ` uses Y/Z. `X`, `Y`, `Z`,
+  `negX`, `negY`, and `negZ` are unit `SpatialLine` instances with zero origins;
+  `negX`, `negY`, and `negZ` point along the corresponding negative world axes.
+  SpatialLine is a vec3-compatible direction array with a copied origin;
+  an extrusion ignores its origin.
   `center` is the shared local Point `{ x: 0, y: 0 }`; `origin` is the shared
   world-space zero vec3 `[0, 0, 0]`.
 - Keep API documentation grouped into Classes (including interfaces and types),

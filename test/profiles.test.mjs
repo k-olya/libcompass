@@ -67,7 +67,9 @@ test('smooth open curve joins work in arbitrary insertion order and direction', 
     return t === 0 ? point : t === 1 ? points[(i + 1) % 4] : { x: 3 * Math.cos((i + t) * Math.PI / 2), y: 2 * Math.sin((i + t) * Math.PI / 2) };
   } }));
   const body = new Sketch().add(arcs[2], arcs[0], arcs[3], arcs[1]).extrude({ length: 2 });
-  assert.equal(body.vertices.length, 8);
+  assert.equal(body.vertices.length, 2);
+  assert.equal(body.boundaries.length, 2);
+  assert.equal(body.surfaces.length, 3);
   checkMesh(body, 12 * Math.PI);
 });
 

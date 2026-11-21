@@ -23,6 +23,10 @@ import { degtorad } from '../util/angles.js';
  * as construction geometry. Curves remain mathematical spatial boundaries with
  * ruled side surfaces. Temporary sampled polylines determine profile area,
  * intersections, and nesting; no triangle mesh is created here.
+ * Connected open planar curves with matching oriented endpoint tangents are
+ * composed into one exact boundary, removing unnecessary walls and seams. Runs
+ * may remain open or close smoothly; existing loop curves are never joined.
+ * Source sketch elements and their sampling overrides are preserved.
  *
  * The placement is copied; treat source curve evaluators as immutable. Boundary
  * and vertex identities are shared. Only triangulation introduces facets,

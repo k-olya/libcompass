@@ -82,6 +82,7 @@ export class SpatialCurve implements SpatialBoundary {
    * @remarks
    * The placement frame is copied. Curves retain their evaluator; treat its
    * captured geometry as immutable. A plain object implementing at(t) is accepted.
+   * Planar tangent evaluators and sampling overrides are lifted through the frame.
    * @param options - Planar curve and placement plane; defaults to world XY.
    * @returns An exact curve with the same [0, 1] parameterization. Loops share
    * one endpoint vertex; open curves retain distinct endpoints.
@@ -102,7 +103,12 @@ export class SpatialCurve implements SpatialBoundary {
       c: Array.from(plane.origin).map((value, i) => value + plane.yAxis[i]) as [number, number, number] });
     const at = (t: number) => frame.toWorld(definition.at(t));
     const first = start ?? at(0);
-    const spatial = new SpatialCurve({ at, start: first, end: end ?? (definition.isLoop() ? first : at(1)) });
+    const spatial = new SpatialCurve({ at, start: first, end: end ?? (definition.isLoop() ? first : at(1)),
+      tangent: t => {
+        const tangent = definition.tangent(t);
+        return vec3.scaleAndAdd([0, 0, 0], vec3.scale([0, 0, 0], frame.xAxis, tangent[0]), frame.yAxis, tangent[1]);
+      },
+    });
     spatial.planar = { curve: definition, plane: frame };
     return spatial;
   }

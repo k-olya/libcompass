@@ -3,9 +3,10 @@ import { PlanarCurve } from '../PlanarCurve.js';
 import type { PlanarLoop } from '../PlanarLoop.js';
 import type { Point } from '../Point.js';
 import type { Sketch } from '../Sketch.js';
+import { joinPlanarCurves } from './joinPlanarCurves.js';
 import { containsInterior, signedArea, validateLoops } from './polygon.js';
 
-/** Original oriented boundaries retained alongside temporary analysis polylines. */
+/** Exact oriented boundaries retained alongside temporary analysis polylines. */
 export type ProfileBoundary = { curve: PlanarCurve; reversed: boolean; straight: false }
   | { curve: LineSegment; reversed: boolean; straight: true };
 export class Profile implements PlanarLoop {
@@ -14,8 +15,8 @@ export class Profile implements PlanarLoop {
   readonly signedArea: number;
   readonly anchor: Point;
   constructor({ boundaries }: { boundaries: ProfileBoundary[] }) {
-    this.boundaries = boundaries;
-    this.points = boundaries.flatMap(({ curve, reversed, straight }) => {
+    this.boundaries = joinPlanarCurves(boundaries);
+    this.points = this.boundaries.flatMap(({ curve, reversed, straight }) => {
       const points = straight ? [curve.start, curve.end] : curve.sample();
       return (reversed ? [...points].reverse() : points).slice(0, -1);
     });

@@ -37,6 +37,8 @@ class SweptSurface extends SpatialSurface {
  * tangent, then transported with minimal twist; its original position is ignored.
  * Closed paths distribute residual frame rotation by sampled arc length and have
  * no caps or seam edges. Sampling never introduces intermediate solid topology.
+ * Smooth runs of connected open profile curves are joined as in extrude(),
+ * retaining exact evaluators and sampling overrides; existing loops stay separate.
  * Validation uses temporary polylines and a mesh at the library resolution;
  * arbitrary oscillations hidden by sampling overrides cannot be certified.
  *

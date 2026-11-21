@@ -473,6 +473,21 @@ through inheritance. Extrusion accepts closed planar curves and assembles open
 curves and line segments into closed, unbranched profiles. Construction points and
 infinite lines do not contribute to profiles.
 
+Extrusion joins connected open `PlanarCurve`s when their endpoint coordinates
+match and their tangents agree in the profile's traversal direction. A smooth
+run becomes one exact piecewise curve, which may stay open or close into a loop.
+Each source curve occupies an equal interval of the new [0, 1] parameter;
+its equations, tangent evaluator, and sampling override are retained. Sketch
+elements stay unchanged. Straight segments and sharp joins retain their topology.
+Already-closed curves never join other curves; two touching circles remain
+independent loops and still fail the usual touching-profile validation.
+
+This removes unnecessary side surfaces and seam edges, so solid boundary indices
+can change for profiles containing smoothly connected curves. For example, four
+quarter arcs from a fully rounded square extrude to one cylindrical wall and
+two closed rims, allowing `round({ radius })` to produce a sphere just as with
+a single circle. `extrudeAlongCurve` uses the same profile assembly.
+
 `PlanarLoop` is an interface with `area()` and `contains({ point })`, describing
 a simple closed boundary and its strict interior. `PlanarCurve` provides these
 methods for loops; calling them on an open curve throws. Composite profiles

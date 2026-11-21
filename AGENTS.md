@@ -46,6 +46,12 @@
 - Sketches may contain multiple closed profiles, holes, and islands. Use nesting
   (even-odd fill) to determine material. Points and infinite lines are construction
   geometry and do not bound a profile.
+- During extrusion profile assembly, join connected open PlanarCurves whose
+  oriented endpoint tangents agree into exact piecewise curves. Smooth runs may
+  remain open or close into loops; already-closed input curves never join other
+  curves, even at coincident endpoints. Keep sharp corners/cusps as physical
+  joins, preserve source sampling overrides and normalized parameter metadata,
+  and leave the source sketch unchanged. Do not add curve-type special cases.
 - Extrusion takes a finite, nonzero signed `length` and an optional finite,
   nonzero `axis` defaulting to the sketch plane normal. Normalize the axis
   internally without mutating it; displacement is `normalize(axis) * length`.

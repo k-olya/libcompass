@@ -5,18 +5,20 @@ import { chamferPlanes, clipChamferPlanes } from '../internal/chamferPlanes.js';
 import { validateSweepMesh } from '../internal/validateSweepMesh.js';
 import { Surface } from '../Surface.js';
 import { degtorad } from '../util/angles.js';
+import { searchBoundaries, type BoundarySelector } from './searchBoundaries.js';
 
 /**
  * Return a new solid with bevels on selected boundaries, without mutating the input.
  *
- * @param options - Input solid, setback length, angle, and original boundary indices.
+ * @param options - Input solid, setback length, angle, and boundary selectors.
  * @param options.solid - Solid whose own surfaces are chamfered; child nodes are retained unchanged.
  * @param options.length - Positive setback distance on the first adjoining surface
  * in solid.surfaces order; defaults to 0.5. On curved surfaces this is a chord distance.
  * @param options.angle - Angle in degrees from that surface toward the material;
  * strictly between 0 and 90, default 45.
- * @param options.boundaries - Indices in the input solid.boundaries array.
- * Omit or pass [] to chamfer all boundaries. Repeated indices are applied once.
+ * @param options.boundaries - Mixed original boundary indices/objects, planar
+ * faces of the solid, and predicates accepted by {@link searchBoundaries}.
+ * Omit or pass [] to chamfer all boundaries. Matches are unique by identity.
  * @remarks
  * Curved rims retain their evaluators and trim the adjoining surface charts.
  * Convex straight edges between planar faces use analytic clipping planes.
@@ -39,16 +41,13 @@ export function chamfer({ solid, length = 0.5, angle: angleDEG = 45, boundaries 
   length?: number;
   /** Angle from that surface in degrees; defaults to 45. */
   angle?: number;
-  /** Input solid.boundaries indices; omitted or empty means all boundaries. */
-  boundaries?: readonly number[];
+  /** Mixed selectors resolved by searchBoundaries; omitted or empty means all. */
+  boundaries?: readonly BoundarySelector[];
 }): Solid {
   if (!(solid instanceof Solid)) throw new TypeError('Chamfer requires a Solid');
   if (!Number.isFinite(length) || length <= 0) throw new RangeError('Chamfer length must be finite and positive');
   if (!Number.isFinite(angleDEG) || angleDEG <= 0 || angleDEG >= 90) throw new RangeError('Chamfer angle must be between 0 and 90 degrees');
-  if (!Array.isArray(boundaries) || boundaries.some(index => !Number.isInteger(index) || index < 0 || index >= solid.boundaries.length)) {
-    throw new RangeError('Chamfer boundaries must be valid indices in solid.boundaries');
-  }
-  const selected = boundaries.length ? [...new Set(boundaries)].map(index => solid.boundaries[index]) : [...solid.boundaries];
+  const selected = searchBoundaries({ solid, boundaries });
   for (const boundary of solid.boundaries) {
     if (solid.surfaces.filter(surface => surface.boundaries.includes(boundary)).length !== 2) {
       throw new RangeError('Chamfer requires a closed manifold solid with two surfaces per boundary');

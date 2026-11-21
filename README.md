@@ -148,9 +148,9 @@ from vertex indices. Ordinary `.sample()` still returns points or vertices.
 
 `chamfer({ solid, length = 0.5, angle = 45, boundaries = [] })` returns a new
 beveled solid. The instance form is `solid.chamfer({ length, angle, boundaries })`,
-or simply `solid.chamfer()` for the defaults. `boundaries` contains indices from the input `solid.boundaries`;
-omitting it or passing `[]` affects every boundary. Duplicate indices are applied
-once. Length is the positive setback on the first adjoining surface in
+or simply `solid.chamfer()` for the defaults. `boundaries` accepts mixed selectors
+resolved by `searchBoundaries` (described below); omitting it or passing `[]`
+affects every boundary. Length is the positive setback on the first adjoining surface in
 `solid.surfaces` order (a chord distance on curved surfaces), and angle is in
 degrees from that surface toward the material, strictly between 0 and 90.
 On a right-angle edge, the other setback is `length * tan(degtorad(angle))`.
@@ -173,9 +173,36 @@ numerical limitations as sweep validation. A smooth solid with no physical
 boundaries, such as a torus, returns a new solid with its existing surfaces.
 
 `round({ solid, radius = 0.5, boundaries = [] })`, or `solid.round(options)`,
-returns a new solid with tangent constant-radius rounds. Boundary indices select
-from the original solid; omit them or pass `[]` for all boundaries. No source
+returns a new solid with tangent constant-radius rounds. Boundary selectors refer
+to the original solid; omit them or pass `[]` for all boundaries. No source
 geometry, child nodes or cached triangulations are modified.
+
+Both operations and their solid methods use
+`searchBoundaries({ solid, boundaries })`. Each list entry may be an index in
+`solid.boundaries`, a boundary object from that array, a planar `Face` from
+`solid.surfaces`, or a predicate `({ solid, face, boundary }) => boolean`.
+A face expands to all its outer and hole boundaries. Predicates test every
+boundary against every adjoining planar face, including it if any test matches.
+For a boundary adjoining only curved surfaces, the predicate runs once with
+`face: undefined`. All predicates run even when another selector already matched.
+
+The helper returns the original boundary objects, unique by identity and in
+first-match order. Indices and objects must belong to the input solid's own
+topology; child solids are excluded. Invalid selectors and nonboolean predicate
+results throw. A nonempty list with no matches selects nothing: chamfer and round
+return a fresh solid with unchanged geometry. Omitted or empty lists select all.
+`BoundarySelector` and `BoundaryPredicate` are exported types.
+
+```ts
+const cap = part.surfaces.find(surface => surface instanceof Face)!;
+const selected = searchBoundaries({ solid: part, boundaries: [
+  0, part.boundaries[0], cap, // Overlapping selections are deduplicated.
+  ({ face }) => face !== undefined && face.plane.normal[2] > 0.9,
+] });
+const beveled = part.chamfer({ length: 0.5, boundaries: [
+  ({ boundary }) => boundary.start.position[2] > 5,
+] });
+```
 
 Straight edges of convex planar solids produce cylindrical blends. Three selected
 edges meeting at a regular corner produce a spherical patch. Smooth closed rims

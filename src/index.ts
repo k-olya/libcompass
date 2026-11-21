@@ -38,6 +38,7 @@ export { extrudeAlongCurve } from './operations/extrudeAlongCurve.js';
 export { extrude } from './operations/extrude.js';
 export { round } from './operations/round.js';
 export { chamfer } from './operations/chamfer.js';
+export { searchBoundaries, type BoundarySelector, type BoundaryPredicate } from './operations/searchBoundaries.js';
 export { trimCurve } from './operations/trimCurve.js';
 export { trimSurface } from './operations/trimSurface.js';
 export { intersect } from './operations/intersect.js';

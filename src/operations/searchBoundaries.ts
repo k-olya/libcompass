@@ -1,0 +1,83 @@
+import { Face } from '../Face.js';
+import { Solid } from '../Solid.js';
+import type { SpatialBoundary } from '../SpatialBoundary.js';
+
+/** Test a boundary against each adjoining planar face, or once without a face. */
+export type BoundaryPredicate = (options: {
+  /** Solid whose own topology is searched; child nodes are excluded. */
+  solid: Solid;
+  /** Adjoining planar face; undefined if the boundary adjoins only curved surfaces. */
+  face: Face | undefined;
+  /** Original shared boundary object. */
+  boundary: SpatialBoundary;
+}) => boolean;
+
+/** An original boundary index/object, a planar face of the solid, or a predicate. */
+export type BoundarySelector = number | SpatialBoundary | Face | BoundaryPredicate;
+
+/**
+ * Find unique original boundaries using mixed topology selectors.
+ * @param options.solid - Solid whose own boundaries and planar faces are searched.
+ * @param options.boundaries - Boundary indices, boundary objects, planar Face
+ * objects, and predicates. Omitted or empty selects all boundaries. Face selectors
+ * include outer and hole boundaries. Objects must belong to the input solid.
+ * @remarks
+ * Each predicate is called for every boundary with each adjoining planar Face.
+ * A match on any face includes the boundary. If there is no adjoining planar
+ * face, it is called once with face: undefined, including curved-only joins.
+ * All predicates run even when another selector already includes the boundary.
+ * @returns Original boundary objects, deduplicated by identity in first-match
+ * order. A nonempty selection with no matches returns an empty array.
+ * @throws {@link TypeError} if solid is invalid or a predicate returns a nonboolean.
+ * @throws {@link RangeError} if the list, an index, or a topology object is invalid.
+ * Predicate exceptions propagate unchanged; the helper does not modify geometry.
+ * @example
+ * ```ts
+ * const cap = part.surfaces.find(surface => surface instanceof Face)!;
+ * const rims = searchBoundaries({ solid: part, boundaries: [
+ *   0, part.boundaries[0], cap,
+ *   ({ face }) => face !== undefined && face.plane.normal[2] > 0.9,
+ * ] });
+ * const rounded = part.round({ radius: 0.5, boundaries: rims });
+ * ```
+ */
+export function searchBoundaries({ solid, boundaries = [] }: {
+  /** Input solid; never modified. */
+  solid: Solid;
+  /** Mixed boundary selectors; omitted or empty means all boundaries. */
+  boundaries?: readonly BoundarySelector[];
+}): SpatialBoundary[] {
+  if (!(solid instanceof Solid)) throw new TypeError('Boundary search requires a Solid');
+  if (!Array.isArray(boundaries)) throw new RangeError('Boundary selectors must be an array');
+  if (!boundaries.length) return [...solid.boundaries];
+  const available = new Set(solid.boundaries), selected = new Set<SpatialBoundary>();
+  const adjoining = new Map<SpatialBoundary, Set<Face>>();
+  for (const face of solid.surfaces) if (face instanceof Face) for (const boundary of face.boundaries) {
+    if (!adjoining.has(boundary)) adjoining.set(boundary, new Set());
+    adjoining.get(boundary)!.add(face);
+  }
+  for (const selector of boundaries) {
+    if (typeof selector === 'number') {
+      if (!Number.isInteger(selector) || selector < 0 || selector >= solid.boundaries.length) {
+        throw new RangeError('Boundary indices must be valid indices in solid.boundaries');
+      }
+      selected.add(solid.boundaries[selector]);
+    } else if (typeof selector === 'function') {
+      for (const boundary of solid.boundaries) {
+        for (const face of adjoining.get(boundary) ?? [undefined]) {
+          const match = selector({ solid, face, boundary });
+          if (typeof match !== 'boolean') throw new TypeError('Boundary predicates must return a boolean');
+          if (match) selected.add(boundary);
+        }
+      }
+    } else if (selector instanceof Face) {
+      if (!solid.surfaces.includes(selector)) throw new RangeError('Selected faces must belong to solid.surfaces');
+      for (const boundary of selector.boundaries) selected.add(boundary);
+    } else if (available.has(selector)) {
+      selected.add(selector);
+    } else {
+      throw new RangeError('Boundary selectors must be indices, boundaries or planar faces of the solid, or predicates');
+    }
+  }
+  return [...selected];
+}

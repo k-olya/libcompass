@@ -14,6 +14,7 @@ import { Surface } from './Surface.js';
 import type { Vertex } from './Vertex.js';
 import { rigidCopies } from './internal/rigidContext.js';
 import { TransformMat4 } from './TransformMat4.js';
+import type { BoundarySelector } from './operations/searchBoundaries.js';
 
 /**
  * A memoized scene node retaining exact planar and spatial surfaces.
@@ -74,12 +75,13 @@ export class Solid extends Memo {
 
   /**
    * Return a new chamfered solid, leaving this solid and its cached mesh unchanged.
-   * @param options - Setback, angle, and indices in this solid's boundaries array.
+   * @param options - Setback, angle, and boundary selectors for this solid.
    * @param options.length - Positive setback on the first adjoining surface in
    * surfaces order; defaults to 0.5 (a chord distance on curved surfaces).
    * @param options.angle - Angle in degrees from that surface toward the material;
    * strictly between 0 and 90, default 45.
-   * @param options.boundaries - Boundary indices; omitted or empty means all.
+   * @param options.boundaries - Indices, boundary objects, planar faces, or predicates
+   * resolved by {@link searchBoundaries}; omitted or empty means all.
    * @returns A new solid retaining the original child nodes in a new child array.
    * @throws {@link RangeError} for invalid options, oversized bevels, or unresolved intersections.
    * @see {@link chamfer}
@@ -89,14 +91,15 @@ export class Solid extends Memo {
     length?: number;
     /** Angle in degrees; defaults to 45. */
     angle?: number;
-    /** Indices in this.boundaries; omitted or empty selects all boundaries. */
-    boundaries?: readonly number[];
+    /** Mixed selectors resolved by searchBoundaries; omitted or empty means all. */
+    boundaries?: readonly BoundarySelector[];
   } = {}): Solid { return chamfer({ ...options, solid: this }); }
 
   /**
    * Return a new rounded solid, leaving this solid and its cached mesh unchanged.
    * @param options.radius - Positive tangent-round radius; defaults to 0.5 model units.
-   * @param options.boundaries - Original boundary indices; omitted or [] selects all.
+   * @param options.boundaries - Indices, boundary objects, planar faces, or predicates
+   * resolved by {@link searchBoundaries}; omitted or empty means all.
    * @returns A new solid retaining child node identities in a fresh array.
    * @throws {@link RangeError} for invalid options or unsupported/unresolved rounds.
    * @see {@link round}
@@ -104,8 +107,8 @@ export class Solid extends Memo {
   round(options: {
     /** Positive radius in model units; defaults to 0.5. */
     radius?: number;
-    /** Input boundary indices; omitted or empty selects every boundary. */
-    boundaries?: readonly number[];
+    /** Mixed selectors resolved by searchBoundaries; omitted or empty means all. */
+    boundaries?: readonly BoundarySelector[];
   } = {}): Solid { return round({ ...options, solid: this }); }
 
   /**

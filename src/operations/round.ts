@@ -5,12 +5,15 @@ import { roundCurves } from '../internal/roundCurves.js';
 import { roundPlanes } from '../internal/roundPlanes.js';
 import { RoundTopology } from '../internal/roundTopology.js';
 import { validateSweepMesh } from '../internal/validateSweepMesh.js';
+import { searchBoundaries, type BoundarySelector } from './searchBoundaries.js';
 
 /**
  * Return a new solid with constant-radius tangent rounds on selected boundaries.
  * @param options.solid - Input solid; its geometry, children and cached mesh are unchanged.
  * @param options.radius - Positive rolling-ball radius in model units; defaults to 0.5.
- * @param options.boundaries - Original solid.boundaries indices; omitted or [] selects all.
+ * @param options.boundaries - Mixed original boundary indices/objects, planar
+ * faces of the solid, and predicates accepted by {@link searchBoundaries}.
+ * Omitted or [] selects all. Matches are unique by identity.
  * @remarks
  * Rounds retain mathematical surfaces and shared exact contact curves. Three rounded
  * planar edges meet in a spherical corner. At the radius limit, consumed faces and
@@ -30,18 +33,15 @@ export function round({ solid, radius = 0.5, boundaries = [] }: {
   solid: Solid;
   /** Positive radius in model units; defaults to 0.5. */
   radius?: number;
-  /** Input boundary indices; omitted or empty selects every boundary. */
-  boundaries?: readonly number[];
+  /** Mixed selectors resolved by searchBoundaries; omitted or empty means all. */
+  boundaries?: readonly BoundarySelector[];
 }): Solid {
   if (!(solid instanceof Solid)) throw new TypeError('Round requires a Solid');
   if (!Number.isFinite(radius) || radius <= 0) throw new RangeError('Round radius must be finite and positive');
-  if (!Array.isArray(boundaries) || boundaries.some(index => !Number.isInteger(index) || index < 0 || index >= solid.boundaries.length)) {
-    throw new RangeError('Round boundaries must be valid indices in solid.boundaries');
-  }
+  const selected = searchBoundaries({ solid, boundaries });
   for (const boundary of solid.boundaries) if (solid.surfaces.filter(surface => surface.boundaries.includes(boundary)).length !== 2) {
     throw new RangeError('Round requires a closed manifold solid with two surfaces per boundary');
   }
-  const selected = (boundaries.length ? [...new Set(boundaries)] : solid.boundaries.map((_, index) => index)).map(index => solid.boundaries[index]);
   if (!selected.length) return new Solid({ surfaces: solid.surfaces }).add(solid.children);
   const topology = new RoundTopology(radius), straight = selected.filter(boundary => boundary instanceof Edge);
   const surfaces = roundCurves(roundPlanes(solid, straight, radius, topology), selected.filter(boundary => !(boundary instanceof Edge)), radius, topology);

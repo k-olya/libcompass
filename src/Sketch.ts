@@ -48,11 +48,12 @@ export class Sketch {
   /**
    * Append entities to the drawing.
    *
-   * @param elements - Construction geometry or profile boundaries to append.
+   * @param elements - Construction geometry, profile boundaries, or arrays of them to append.
+   * Arrays are flattened one level; readonly arrays and mixed individual/array arguments are accepted.
    * @returns This sketch for chaining. Profile validity is checked at extrusion.
    */
-  add(...elements: SketchElement[]): this {
-    this.elements.push(...elements);
+  add(...elements: (SketchElement | readonly SketchElement[])[]): this {
+    for (const element of elements.flat()) this.elements.push(element);
     return this;
   }
 

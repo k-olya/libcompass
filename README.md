@@ -367,14 +367,19 @@ analytic tangent. An arc can join line segments or other curves to bound a profi
 ## Planar segment generators
 
 `polyline`, `rectangle`, and `centerRectangle` return `LineSegment[]`, with shared
-endpoint objects at each join. Add them to a sketch using a spread:
+endpoint objects at each join. Pass these arrays directly to a sketch's `add`:
 
 ```ts
 const s = sketch();
-s.add(...rectangle({ start: { x: -20, y: -10 }, end: { x: 20, y: 10 } }));
+s.add(rectangle({ start: { x: -20, y: -10 }, end: { x: 20, y: 10 } }));
 const centered = centerRectangle({ center: { x: 5, y: 3 }, corner: { x: 10, y: 6 } });
 const triangle = polyline({ points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: 8 }], loop: true });
 ```
+
+`Sketch.add` accepts individual entities, arrays, or a mixture, including readonly
+arrays: `s.add(point, segments, anotherPoint)`. Array arguments are flattened one
+level in order, retaining object identities. Existing `s.add(...segments)` calls
+still work; passing an array directly avoids function argument limits for large inputs.
 
 Polyline joins consecutive `points`; `loop` defaults to false. With `loop: true`,
 it connects the last point to the first and accepts an already repeated closing
@@ -545,6 +550,8 @@ Shared defaults live in `src/defaults/` and are exported from the root:
 
 | Default | Value or local frame | Normal |
 | --- | --- | --- |
+| `center` | Local XY point `{ x: 0, y: 0 }` | — |
+| `origin` | World-space vec3 `[0, 0, 0]` | — |
 | `X` | Zero-origin unit spatial line `[1, 0, 0]` | — |
 | `Y` | Zero-origin unit spatial line `[0, 1, 0]` | — |
 | `Z` | Zero-origin unit spatial line `[0, 0, 1]` | — |
@@ -563,7 +570,12 @@ const s = sketch({ plane: XY }).add(circle({ center: { x: 0, y: 0 }, radius: 2 }
 const body = extrude({ sketch: s, axis: Z, length: 1 }); // Extrude one unit along +Z.
 ```
 
-Direct modules are `libcompass/defaults/axes` and `libcompass/defaults/planes`.
+`center` is a ready-to-use `Point`, for example `circle({ center, radius: 2 })`.
+`origin` is a zero vec3, for example `spatialLine({ direction: Z, origin })`.
+Treat these shared coordinates as immutable too.
+
+Direct modules are `libcompass/defaults/axes`, `libcompass/defaults/planes`, and
+`libcompass/defaults/points`.
 
 ## Spatial lines and rigid transformations
 
@@ -609,6 +621,52 @@ under new lazy transform nodes referencing the original children. Inputs, child
 lists and memo caches are never modified by the operation. Treat captured source
 geometry as immutable, as with other evaluator-based operations.
 
+## Geometry arrays
+
+`displacementArray({ object, vector, N, offset, width })` and
+`rotationArray({ object, axis, N, offset, width })` return ordinary JavaScript
+arrays of fresh copies. They accept the same geometry as `displace` and `rotate`:
+planes, spatial lines/curves, edges, surfaces, and solids. Inputs remain unchanged.
+Displacement normalizes `vector` and uses model units for spacing. Rotation uses
+a spatial line's origin/direction and signed degrees for spacing.
+
+Specify two of `N`, `offset`, and `width`:
+
+| Given | Computed |
+| --- | --- |
+| `N`, `offset` | `width = N * offset` |
+| `N`, `width` | `offset = width / N` |
+| `width`, `offset` | `N = floor(width / offset)` (with integer roundoff tolerance) |
+
+`N` includes a fresh copy at zero. Positions/angles are `0`, `offset`, through
+`(N - 1) * offset`; the width endpoint is excluded. Thus width 10 with offset 5
+gives two copies, at 0 and 5. A non-divisible width rounds the count down.
+Negative spacing reverses the pattern; supplied width and offset must share a
+sign. `N` must be positive and integral; spacing and width must be finite and
+nonzero. Missing or excessive parameters throw.
+
+For rotation, `N` alone or `offset` alone defaults width to a full circle:
+360 degrees, or -360 for a negative offset. `N: 8` produces copies at 0, 45,
+through 315 degrees, without repeating the starting copy at 360 degrees.
+
+```ts
+const row = displacementArray({ object: part, vector: X, N: 4, offset: 10 });
+const grid = displacementArray({ object: row, vector: Y, N: 3, offset: 10 });
+scene.add(grid);
+
+const ring = rotationArray({ object: part, axis: Z, N: 8 });
+scene.add(ring);
+```
+
+Nested array targets are transformed recursively and flattened into one output
+array. `grid` above is a `Solid[]` containing twelve solids, ordered by repetition
+and then by depth-first target order. For a target with M geometry leaves, N
+repetitions return N * M items. Empty arrays contribute no items; readonly input
+arrays are accepted. `SpatialLine` stays intact as geometry rather than flattening
+into its numeric coordinates. Geometry types,
+exact evaluators, shared topology inside each solid, and sampling overrides are
+retained by the existing transformations.
+
 ## Scene graph and utilities
 
 `Node` groups child nodes, and `Solid` extends `Memo`, which extends `Node`.
@@ -619,6 +677,11 @@ Sketches, planes, vertices, edges, curves, and surfaces remain independent math 
 
 Use `node.add(first, second)` to append children and `node.remove(first, second)`
 to remove child objects by identity. Both methods return the node for chaining.
+`add` also accepts arrays mixed with individual nodes, such as
+`scene.add(parts, anotherPart, moreParts)`. Readonly arrays are accepted and flattened
+one level, preserving order and repeated references. Input arrays are not changed.
+Pass large arrays directly to avoid function argument limits; no internal spreading
+is used to append them.
 Removal deletes all occurrences of the supplied objects and ignores absent ones.
 After changing children or transform properties, explicitly refresh affected
 memoized nodes and cached ancestors before triangulating again. Refresh only

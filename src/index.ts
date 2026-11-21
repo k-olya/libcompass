@@ -47,6 +47,9 @@ export { SpatialLine, spatialLine } from './SpatialLine.js';
 export type { SpatialObject } from './SpatialObject.js';
 export { rotate } from './operations/rotate.js';
 export { displace } from './operations/displace.js';
+export type { ArrayTarget, ArrayCopy } from './ArrayTarget.js';
+export { displacementArray } from './operations/displacementArray.js';
+export { rotationArray } from './operations/rotationArray.js';
 export { spatialCurveFromPlanar } from './operations/spatialCurveFromPlanar.js';
 export { Surface } from './Surface.js';
 export { RuledSurface, ruledSurface } from './RuledSurface.js';
@@ -56,3 +59,4 @@ export { SurfaceRegion, surfaceRegion, type SurfaceTrim, type SurfaceRegionChart
 export { TRIANGULATION_RESOLUTION, setTriangulationResolution } from './triangulation.js';
 export { X, Y, Z } from './defaults/axes.js';
 export { XY, ZX, YZ } from './defaults/planes.js';
+export { center, origin } from './defaults/points.js';

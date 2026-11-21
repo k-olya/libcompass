@@ -57,3 +57,20 @@ test('center rectangles mirror any corner about an offset center without modifyi
   assert.throws(() => centerRectangle({ center, corner: { x: 5, y: 1 } }), RangeError);
   assert.throws(() => centerRectangle({ center: { x: NaN, y: 0 }, corner: center }), RangeError);
 });
+
+test('sketch add accepts generated arrays, mixed arguments and large point arrays', () => {
+  const segments = Object.freeze(centerRectangle({ center: { x: 0, y: 0 }, corner: { x: 1, y: 2 } }));
+  const point = Object.freeze({ x: 0, y: 0 });
+  const drawing = sketch();
+  assert.equal(drawing.add(point, segments, []), drawing);
+  assert.deepEqual(drawing.elements, [point, ...segments]);
+  const body = drawing.extrude({ length: 1 });
+  assert.equal(body.surfaces.length, 6);
+  assert.equal(body.triangulate().length / 9, 12);
+  const many = new Array(200_000).fill(point);
+  const large = sketch().add(many);
+  assert.equal(large.elements.length, many.length);
+  assert.equal(large.elements.at(-1), point);
+  large.add(large.elements);
+  assert.equal(large.elements.length, 400_000);
+});

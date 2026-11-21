@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { vec3 } from 'gl-matrix';
-import { Circle, Plane, Sketch, SpatialLine, X, Y, Z, XY, ZX, YZ } from 'libcompass';
+import { Circle, Plane, Sketch, SpatialLine, X, Y, Z, XY, ZX, YZ, center, origin } from 'libcompass';
 import { X as directX } from 'libcompass/defaults/axes';
 import { ZX as directZX } from 'libcompass/defaults/planes';
 
@@ -26,14 +26,14 @@ test('default planes honor their named local axes and work as sketch planes', ()
     [YZ, Y, Z, X, [0, 2, 3]],
   ]) {
     assert.ok(plane instanceof Plane);
-    assert.deepEqual(plane.origin, [0, 0, 0]);
+    assert.deepEqual(plane.origin, origin);
     assert.ok(vec3.exactEquals(plane.xAxis, x));
     assert.ok(vec3.exactEquals(plane.yAxis, y));
     assert.ok(vec3.exactEquals(plane.normal, vec3.cross([0, 0, 0], x, y)));
     assert.ok(vec3.exactEquals(plane.normal, direction));
     assert.deepEqual(plane.toWorld({ x: 2, y: 3 }).position, position);
     assert.deepEqual(plane.toLocal(position), { x: 2, y: 3 });
-    const sketch = new Sketch({ plane }).add(new Circle({ center: { x: 0, y: 0 }, radius: 1 }));
+    const sketch = new Sketch({ plane }).add(new Circle({ center, radius: 1 }));
     const body = sketch.extrude({ length: 1 });
     assert.equal(body.surfaces.length, 3);
     assert.ok(body.triangulate().length > 0);

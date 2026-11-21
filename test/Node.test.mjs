@@ -74,3 +74,18 @@ test('add and remove accept variadic children, preserve order, and return the re
   parent.remove(second, fourth);
   assert.deepEqual(parent.children, []);
 });
+
+test('add accepts arrays mixed with individual nodes without argument-count limits', () => {
+  const parent = new Node(), first = new Node(), second = new Node();
+  const input = Object.freeze([second, first]);
+  assert.equal(parent.add(first, input, [], second), parent);
+  assert.deepEqual(parent.children, [first, second, first, second]);
+  assert.deepEqual(input, [second, first]);
+  parent.add(parent.children);
+  assert.deepEqual(parent.children, [first, second, first, second, first, second, first, second]);
+  const many = new Array(200_000).fill(first);
+  const large = new Node().add(many);
+  assert.equal(large.children.length, many.length);
+  assert.equal(large.children[0], first);
+  assert.equal(large.children.at(-1), first);
+});

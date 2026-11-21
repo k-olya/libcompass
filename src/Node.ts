@@ -17,11 +17,12 @@ export class Node {
    * Repeated references are allowed. Changes do not invalidate caches;
    * explicitly refresh affected memoized nodes and their cached ancestors.
    *
-   * @param children - Child nodes to append.
+   * @param children - Child nodes or arrays of child nodes to append; arrays are flattened one level.
+   * Readonly arrays and mixtures of individual nodes and arrays are accepted.
    * @returns This node for chaining.
    */
-  add(...children: Node[]): this {
-    this.children.push(...children);
+  add(...children: (Node | readonly Node[])[]): this {
+    for (const child of children.flat()) this.children.push(child);
     return this;
   }
 

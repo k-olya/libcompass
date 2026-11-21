@@ -15,6 +15,8 @@
   axis order: `XY` uses X/Y, `ZX` uses Z/X, and `YZ` uses Y/Z. `X`, `Y`, and `Z`
   are unit `SpatialLine` instances with zero origins. SpatialLine is a vec3-compatible
   direction array with a copied origin; an extrusion ignores its origin.
+  `center` is the shared local Point `{ x: 0, y: 0 }`; `origin` is the shared
+  world-space zero vec3 `[0, 0, 0]`.
 - Keep API documentation grouped into Classes (including interfaces and types),
   Shorthands, Operations, Defaults, and Util, matching these distinctions.
   Classify public operations and defaults from their module locations.
@@ -24,9 +26,19 @@
   Preserve shared vertices/boundaries, curve/surface sampling overrides, parameter
   charts, periodicity and orientation. Transform solid child geometry lazily under
   new transform nodes without changing source child nodes.
+- Displacement/rotation arrays return ordinary arrays of fresh transformed copies,
+  including a fresh zero-offset copy. Use width = N * offset (endpoint excluded),
+  deriving a missing count by flooring width / offset with roundoff tolerance.
+  Displacement uses a normalized direction; rotation uses degrees about a SpatialLine,
+  defaulting to a full turn when only N or offset is given. Flatten nested targets
+  recursively into the output, in repetition-major, depth-first order. SpatialLine
+  is a geometry leaf despite extending Array; never flatten it into numbers.
 
 # Geometry conventions
 
+- `Sketch.add` and `Node.add` accept mixed individual objects and readonly arrays,
+  flattening array arguments one level in order. Append without spreading into
+  `push` or another function call so large arrays do not exceed argument limits.
 - Active development uses standalone math objects: sketches, planes, and explicit
   vertices, edges, and faces. These objects do not inherit from `Node` or `Memo`.
 - Sketches may contain multiple closed profiles, holes, and islands. Use nesting

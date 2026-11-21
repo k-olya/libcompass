@@ -1,4 +1,7 @@
-import { vec3 } from 'gl-matrix';
+import type { SpatialLine } from './SpatialLine.js';
+import { rotate } from './operations/rotate.js';
+import { displace } from './operations/displace.js';
+import { vec3, type ReadonlyVec3 } from 'gl-matrix';
 import { validateVertex, type Vertex } from './Vertex.js';
 import type { SpatialBoundary } from './SpatialBoundary.js';
 
@@ -27,6 +30,29 @@ export class Edge implements SpatialBoundary {
       throw new RangeError('An edge needs distinct endpoints');
     }
   }
+
+  /**
+   * Return a new rotated edge; leave this object unchanged.
+   * @param options.axis - Spatial line defining the rotation origin and direction.
+   * @param options.angle - Signed right-hand rotation in degrees.
+   * @see {@link rotate}
+   */
+  rotate(options: {
+    /** Rotation axis, including its origin. */
+    axis: SpatialLine;
+    /** Signed rotation in degrees. */
+    angle: number;
+  }): this { return rotate({ ...options, object: this }); }
+
+  /**
+   * Return a new displaced edge; leave this object unchanged.
+   * @param options.vector - XYZ displacement in model units, without normalization.
+   * @see {@link displace}
+   */
+  displace(options: {
+    /** Finite XYZ displacement in model units. */
+    vector: ReadonlyVec3;
+  }): this { return displace({ ...options, object: this }); }
 
   /**
    * Interpolate between the endpoints, or extrapolate beyond them.

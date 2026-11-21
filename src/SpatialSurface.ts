@@ -3,6 +3,7 @@ import type { SpatialBoundary } from './SpatialBoundary.js';
 import { validateVertex, type Vertex } from './Vertex.js';
 import { sampleSurface, type SurfaceGrid } from './internal/surfaceSampling.js';
 import type { Tessellation } from './internal/Tessellation.js';
+import type { RigidContext } from './internal/rigidContext.js';
 
 /** Physical parameter-domain sides; omit sides identified across periodic seams. */
 export interface SurfaceSides {
@@ -53,6 +54,26 @@ export class SpatialSurface extends Surface {
 
   /** Sample adaptively in both parameters; sampling never adds topological edges. */
   sample(): SurfaceGrid { return sampleSurface(this); }
+
+  protected transformedSides({ map }: RigidContext): SurfaceSides {
+    const sides: SurfaceSides = {};
+    for (const [key, side] of Object.entries(this.sides)) if (side) sides[key as keyof SurfaceSides] = map(side);
+    return sides;
+  }
+
+  protected transformedSamples<T extends SpatialSurface>(surface: T, { vertex }: RigidContext): T {
+    surface.sample = () => {
+      const grid = this.sample();
+      return { u: [...grid.u], v: [...grid.v], vertices: grid.vertices.map(row => row.map(vertex)) };
+    };
+    return surface;
+  }
+
+  protected override copyTransformed(context: RigidContext): SpatialSurface {
+    return this.transformedSamples(new SpatialSurface({ at: (u, v) => context.vertex(this.at(u, v)),
+      boundaryLoops: this.boundaryLoops.map(loop => loop.map(context.map)), sides: this.transformedSides(context),
+      periodicU: this.periodicU, periodicV: this.periodicV, reversed: this.reversed }), context);
+  }
 
   protected override prepare(context: Tessellation): void {
     const { u0, u1, v0, v1 } = this.sides;

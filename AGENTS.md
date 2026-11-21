@@ -13,10 +13,17 @@
   Defaults are instances or values, not constructor shorthands. Treat shared
   defaults and their coordinate arrays as immutable. Plane names specify local
   axis order: `XY` uses X/Y, `ZX` uses Z/X, and `YZ` uses Y/Z. `X`, `Y`, and `Z`
-  are unit vectors, not axis classes.
+  are unit `SpatialLine` instances with zero origins. SpatialLine is a vec3-compatible
+  direction array with a copied origin; an extrusion ignores its origin.
 - Keep API documentation grouped into Classes (including interfaces and types),
   Shorthands, Operations, Defaults, and Util, matching these distinctions.
   Classify public operations and defaults from their module locations.
+- Rotate/displace return new mathematical objects, never mutate source geometry,
+  shared defaults or memo caches. Rotate about a SpatialLine's origin and normalized
+  direction, using signed degrees; displacement uses its vector without normalization.
+  Preserve shared vertices/boundaries, curve/surface sampling overrides, parameter
+  charts, periodicity and orientation. Transform solid child geometry lazily under
+  new transform nodes without changing source child nodes.
 
 # Geometry conventions
 

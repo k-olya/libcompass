@@ -1,6 +1,7 @@
 import type { Point } from './Point.js';
 import { SpatialSurface, type SurfaceSides } from './SpatialSurface.js';
 import type { SpatialBoundary } from './SpatialBoundary.js';
+import type { RigidContext } from './internal/rigidContext.js';
 
 /**
  * A mathematical trim of a spatial surface, retaining its original evaluator.
@@ -42,6 +43,12 @@ export class TrimmedSurface extends SpatialSurface {
   parameters(u: number, v: number): Point {
     if (![u, v].every(t => Number.isFinite(t) && t >= 0 && t <= 1)) throw new RangeError('Trim parameters must be in [0, 1]');
     return this.chart(u, v);
+  }
+
+  protected override copyTransformed(context: RigidContext): TrimmedSurface {
+    return this.transformedSamples(new TrimmedSurface({ surface: context.map(this.surface), at: (u, v) => this.parameters(u, v),
+      boundaryLoops: this.boundaryLoops.map(loop => loop.map(context.map)), sides: this.transformedSides(context),
+      periodicU: this.periodicU, periodicV: this.periodicV, reversed: this.reversed }), context);
   }
 }
 

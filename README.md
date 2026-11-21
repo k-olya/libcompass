@@ -316,6 +316,22 @@ returns a `Vertex`; `plane.toLocal(vertexOrVec3)` returns a `Point` and rejects
 points off the plane. Extrusion vectors are in world coordinates and may be
 oblique or point against the plane normal, but must have a nonzero normal component.
 
+## Ellipses
+
+`ellipse({ center, radiusX, radiusY, rotation })` returns an exact, counterclockwise
+`PlanarCurve` loop. `radiusX` and `radiusY` are positive semi-axis lengths before
+rotation (half the full width and height). `rotation` is counterclockwise in
+degrees and defaults to zero. Equal radii produce a circle. For example:
+
+```ts
+s.add(ellipse({ center: { x: 0, y: 0 }, radiusX: 10, radiusY: 5, rotation: 30 }));
+```
+
+`at(0)` is the rotated positive-X semi-axis endpoint, and `at(1)` shares that
+point. Ellipses provide analytic tangents and use the ordinary adaptive sampling,
+profile, lifting, and extrusion paths without new curve-type cases. Nonfinite
+inputs and nonpositive radii throw.
+
 ## Circular arcs
 
 `arc` returns a mathematical `PlanarCurve`, using the normal adaptive sampling
@@ -529,16 +545,16 @@ Shared defaults live in `src/defaults/` and are exported from the root:
 
 | Default | Value or local frame | Normal |
 | --- | --- | --- |
-| `X` | Unit vector `[1, 0, 0]` | — |
-| `Y` | Unit vector `[0, 1, 0]` | — |
-| `Z` | Unit vector `[0, 0, 1]` | — |
+| `X` | Zero-origin unit spatial line `[1, 0, 0]` | — |
+| `Y` | Zero-origin unit spatial line `[0, 1, 0]` | — |
+| `Z` | Zero-origin unit spatial line `[0, 0, 1]` | — |
 | `XY` | Plane at the world origin, local axes +X / +Y | +Z |
 | `ZX` | Plane at the world origin, local axes +Z / +X | +Y |
 | `YZ` | Plane at the world origin, local axes +Y / +Z | +X |
 
-These are ready-to-use values, not factories or axis classes. Treat shared
-planes and vectors as immutable. The vectors have gl-matrix's `ReadonlyVec3` type
-and work as inputs to gl-matrix functions and extrusion axes.
+These are ready-to-use values. `X`, `Y`, and `Z` are unit `SpatialLine` instances
+with origin `[0, 0, 0]`, compatible with gl-matrix vec3 inputs and extrusion axes.
+Treat the shared lines, their origins, and the default planes as immutable.
 
 ```ts
 import { XY, Z, circle, sketch, extrude } from 'libcompass';
@@ -548,6 +564,50 @@ const body = extrude({ sketch: s, axis: Z, length: 1 }); // Extrude one unit alo
 ```
 
 Direct modules are `libcompass/defaults/axes` and `libcompass/defaults/planes`.
+
+## Spatial lines and rigid transformations
+
+`new SpatialLine({ direction, origin })` (or `spatialLine(options)`) is a vec3-compatible
+array subclass with a copied `origin` vector, defaulting to zero. The three array
+components store the direction without normalization. Both input arrays are copied;
+coordinates must be finite and direction nonzero. Array methods such as `slice`
+and `map` return ordinary arrays. Extrusion uses the direction and ignores origin.
+
+`rotate({ object, axis, angle })` and `displace({ object, vector })` return new
+planes, spatial curves, spatial lines, edges, solids, or surfaces. Rotation uses
+signed degrees and the right-hand rule about a `SpatialLine`'s origin and normalized
+direction. Displacement uses the supplied vec3 directly, without normalization.
+
+```ts
+const axis = spatialLine({ direction: [0, 0, 2], origin: [10, 0, 0] });
+const tilted = rotate({ object: XY, axis: X, angle: 30 });
+const shiftedAxis = displace({ object: Z, vector: [10, 0, 0] });
+const turned = rotate({ object: part, axis, angle: 90 });
+const moved = displace({ object: turned, vector: [0, 0, 5] });
+```
+
+Every supported class also has nonmutating instance methods, with the same options
+except `object`:
+
+```ts
+const moved = part.rotate({ axis: Z, angle: 45 }).displace({ vector: [10, 0, 0] });
+const tilted = XY.rotate({ axis: X, angle: 30 });
+const shiftedAxis = Z.displace({ vector: [10, 0, 0] });
+```
+
+Plane, SpatialLine, SpatialCurve, Edge, and Solid implement these methods directly.
+Face, SpatialSurface, RuledSurface, TrimmedSurface, and SurfaceRegion inherit them
+from Surface. Chaining retains each built-in class and its modeling methods.
+
+Transformations preserve mathematical curve/surface evaluators, source sampling
+overrides, shared boundary and vertex identities within the result, plane frames,
+trim charts, periodicity, and orientation. Faces remain `Face` objects usable as
+sketch planes; ruled, trimmed, and region surfaces retain their built-in kinds.
+An origin moves as a point, while a line's direction and a curve's tangent rotate
+as vectors. Translation leaves directions unchanged. Solid child geometry moves
+under new lazy transform nodes referencing the original children. Inputs, child
+lists and memo caches are never modified by the operation. Treat captured source
+geometry as immutable, as with other evaluator-based operations.
 
 ## Scene graph and utilities
 

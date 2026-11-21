@@ -2,15 +2,51 @@ import type { SpatialBoundary } from './SpatialBoundary.js';
 import type { Vertex } from './Vertex.js';
 import { orientLoop } from './internal/boundaryLoops.js';
 import { Tessellation } from './internal/Tessellation.js';
+import type { ReadonlyVec3 } from 'gl-matrix';
+import type { SpatialLine } from './SpatialLine.js';
+import type { RigidContext } from './internal/rigidContext.js';
+import { rotate } from './operations/rotate.js';
+import { displace } from './operations/displace.js';
+
+/** Internal bridge to the protected surface copy hook, without importing derived classes into the operation. */
+export let transformSurface: (surface: Surface, context: RigidContext) => Surface;
 
 /** Shared topological base for planar faces and curved spatial surfaces. */
 export abstract class Surface {
+  static { transformSurface = (surface, context) => surface.copyTransformed(context); }
   /** Physical trim loops; a closed periodic surface can have no boundaries. */
   readonly boundaryLoops: readonly (readonly SpatialBoundary[])[];
 
   protected constructor({ boundaryLoops }: { boundaryLoops: readonly (readonly SpatialBoundary[])[] }) {
     this.boundaryLoops = boundaryLoops.map(loop => [...loop]);
     for (const loop of this.boundaryLoops) orientLoop(loop);
+  }
+
+  /**
+   * Return a new rotated surface, retaining its built-in kind, trims and topology.
+   * @param options.axis - Spatial line defining the rotation origin and direction.
+   * @param options.angle - Signed right-hand rotation in degrees.
+   * @see {@link rotate}
+   */
+  rotate(options: {
+    /** Rotation axis, including its origin. */
+    axis: SpatialLine;
+    /** Signed rotation in degrees. */
+    angle: number;
+  }): this { return rotate({ ...options, object: this }); }
+
+  /**
+   * Return a new displaced surface, retaining its built-in kind, trims and topology.
+   * @param options.vector - XYZ displacement in model units, without normalization.
+   * @see {@link displace}
+   */
+  displace(options: {
+    /** Finite XYZ displacement in model units. */
+    vector: ReadonlyVec3;
+  }): this { return displace({ ...options, object: this }); }
+
+  protected copyTransformed(_context: RigidContext): Surface {
+    throw new TypeError('Transform requires a supported mathematical surface');
   }
 
   /** Shared physical boundary objects; parameter seams are not topology. */

@@ -1,3 +1,6 @@
+import type { SpatialLine } from './SpatialLine.js';
+import { rotate } from './operations/rotate.js';
+import { displace } from './operations/displace.js';
 import { rememberSample, sampleParameter, parameterizedSamples } from './internal/curveSamples.js';
 import { vec3, type ReadonlyVec3 } from 'gl-matrix';
 import { Plane } from './Plane.js';
@@ -44,6 +47,29 @@ export class SpatialCurve implements SpatialBoundary {
       }
     }
   }
+
+  /**
+   * Return a new rotated spatial curve; leave this object unchanged.
+   * @param options.axis - Spatial line defining the rotation origin and direction.
+   * @param options.angle - Signed right-hand rotation in degrees.
+   * @see {@link rotate}
+   */
+  rotate(options: {
+    /** Rotation axis, including its origin. */
+    axis: SpatialLine;
+    /** Signed rotation in degrees. */
+    angle: number;
+  }): this { return rotate({ ...options, object: this }); }
+
+  /**
+   * Return a new displaced spatial curve; leave this object unchanged.
+   * @param options.vector - XYZ displacement in model units, without normalization.
+   * @see {@link displace}
+   */
+  displace(options: {
+    /** Finite XYZ displacement in model units. */
+    vector: ReadonlyVec3;
+  }): this { return displace({ ...options, object: this }); }
 
   /** Local definition, when constructed with fromPlanarCurve. */
   get planarCurve(): PlanarCurve | undefined { return this.planar?.curve; }

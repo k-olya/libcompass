@@ -1,3 +1,6 @@
+import type { SpatialLine } from './SpatialLine.js';
+import { rotate } from './operations/rotate.js';
+import { displace } from './operations/displace.js';
 import { Memo } from './Memo.js';
 import { chamfer } from './operations/chamfer.js';
 import { intersect } from './operations/intersect.js';
@@ -8,6 +11,8 @@ import type { Sketch } from './Sketch.js';
 import type { SpatialBoundary } from './SpatialBoundary.js';
 import { Surface } from './Surface.js';
 import type { Vertex } from './Vertex.js';
+import { rigidCopies } from './internal/rigidContext.js';
+import { TransformMat4 } from './TransformMat4.js';
 
 /**
  * A memoized scene node retaining exact planar and spatial surfaces.
@@ -20,6 +25,14 @@ import type { Vertex } from './Vertex.js';
  * until refresh(). Topology properties exclude children.
  */
 export class Solid extends Memo {
+  static {
+    rigidCopies.solid = (source, { map }, matrix) => {
+      if (!(source instanceof Solid)) return undefined;
+      const copy = new Solid({ surfaces: source.surfaces.map(map) });
+      copy.children = source.children.map(child => new TransformMat4({ matrix: [...matrix] }).add(child));
+      return copy;
+    };
+  }
   readonly surfaces: readonly Surface[];
   readonly boundaries: readonly SpatialBoundary[];
   readonly vertices: readonly Vertex[];
@@ -34,6 +47,29 @@ export class Solid extends Memo {
     this.boundaries = [...new Set(surfaces.flatMap(surface => surface.boundaries))];
     this.vertices = [...new Set(surfaces.flatMap(surface => surface.vertices))];
   }
+
+  /**
+   * Return a new rotated solid; leave this object unchanged.
+   * @param options.axis - Spatial line defining the rotation origin and direction.
+   * @param options.angle - Signed right-hand rotation in degrees.
+   * @see {@link rotate}
+   */
+  rotate(options: {
+    /** Rotation axis, including its origin. */
+    axis: SpatialLine;
+    /** Signed rotation in degrees. */
+    angle: number;
+  }): this { return rotate({ ...options, object: this }); }
+
+  /**
+   * Return a new displaced solid; leave this object unchanged.
+   * @param options.vector - XYZ displacement in model units, without normalization.
+   * @see {@link displace}
+   */
+  displace(options: {
+    /** Finite XYZ displacement in model units. */
+    vector: ReadonlyVec3;
+  }): this { return displace({ ...options, object: this }); }
 
   /**
    * Return a new chamfered solid, leaving this solid and its cached mesh unchanged.

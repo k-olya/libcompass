@@ -5,6 +5,7 @@ import { SpatialSurface } from './SpatialSurface.js';
 import type { Vertex } from './Vertex.js';
 import { validateVertex } from './Vertex.js';
 import type { Tessellation } from './internal/Tessellation.js';
+import type { RigidContext } from './internal/rigidContext.js';
 
 /**
  * An exact ruled surface between two equally parameterized spatial boundaries.
@@ -59,6 +60,13 @@ export class RuledSurface extends SpatialSurface {
   /** Include a singular apex even when a periodic wall has no seam edges. */
   override get vertices(): readonly Vertex[] {
     return 'position' in this.end ? [...new Set([...super.vertices, this.end])] : super.vertices;
+  }
+
+  protected override copyTransformed(context: RigidContext): RuledSurface {
+    const { map, vertex } = context, sides = this.transformedSides(context);
+    return this.transformedSamples(new RuledSurface({ start: map(this.start),
+      end: 'position' in this.end ? vertex(this.end) : map(this.end),
+      sides: sides.u0 ? [sides.u1 as Edge, sides.u0 as Edge] : undefined, reversed: this.reversed }), context);
   }
 
   protected override prepare(context: Tessellation): void {

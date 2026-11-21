@@ -6,6 +6,7 @@ import type { Vertex } from './Vertex.js';
 import { orientLoop, sampleLoop } from './internal/boundaryLoops.js';
 import { signedArea, triangulatePolygon, validateLoops } from './internal/polygon.js';
 import type { Tessellation } from './internal/Tessellation.js';
+import type { RigidContext } from './internal/rigidContext.js';
 
 /**
  * A planar surface trimmed by exact edges and spatial curves.
@@ -60,6 +61,10 @@ export class Face extends Surface {
     if (!plane) throw new RangeError('A face needs a nondegenerate planar boundary');
     this.plane = plane;
     validateLoops(loops.map(loop => loop.map(vertex => this.plane.toLocal(vertex))));
+  }
+
+  protected override copyTransformed({ map }: RigidContext): Face {
+    return new Face({ outer: this.outer.map(map), holes: this.holes.map(loop => loop.map(map)), plane: map(this.plane) });
   }
 
   protected override mesh(context: Tessellation): Float32Array {

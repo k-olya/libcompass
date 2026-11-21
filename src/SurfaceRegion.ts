@@ -5,6 +5,7 @@ import { Surface } from './Surface.js';
 import type { Vertex } from './Vertex.js';
 import type { Tessellation } from './internal/Tessellation.js';
 import { regionMesh } from './internal/regionMesh.js';
+import type { RigidContext } from './internal/rigidContext.js';
 
 /** One use of an exact boundary in a surface's parameter space. */
 export interface SurfaceTrim {
@@ -58,6 +59,13 @@ export class SurfaceRegion extends Surface {
 
   /** Evaluate the underlying mathematical surface on [0, 1]², including outside retained trims. */
   at(u: number, v: number): Vertex { return this.surface.at(u, v); }
+
+  protected override copyTransformed({ map }: RigidContext): SurfaceRegion {
+    const trim = (item: SurfaceTrim): SurfaceTrim => ({ ...item, boundary: map(item.boundary) });
+    return new SurfaceRegion({ surface: map(this.surface), regions: this.regions.map(chart => ({
+      outer: chart.outer.map(trim), holes: chart.holes?.map(hole => hole.map(trim)),
+    })), boundaryLoops: this.boundaryLoops.map(loop => loop.map(map)), reversed: this.reversed });
+  }
 
   protected override prepare(context: Tessellation): void { this.prepared = regionMesh(this, context); }
   protected override mesh(context: Tessellation): Float32Array { return this.prepared ?? regionMesh(this, context); }

@@ -1,3 +1,6 @@
+import type { SpatialLine } from './SpatialLine.js';
+import { rotate } from './operations/rotate.js';
+import { displace } from './operations/displace.js';
 import { vec3, type ReadonlyVec3 } from 'gl-matrix';
 import { validatePoint, type Point } from './Point.js';
 import { validateVertex, type Vertex } from './Vertex.js';
@@ -47,6 +50,29 @@ export class Plane {
     this.normal = normal;
     this.yAxis = vec3.cross([0, 0, 0], normal, x);
   }
+
+  /**
+   * Return a new rotated plane; leave this object unchanged.
+   * @param options.axis - Spatial line defining the rotation origin and direction.
+   * @param options.angle - Signed right-hand rotation in degrees.
+   * @see {@link rotate}
+   */
+  rotate(options: {
+    /** Rotation axis, including its origin. */
+    axis: SpatialLine;
+    /** Signed rotation in degrees. */
+    angle: number;
+  }): this { return rotate({ ...options, object: this }); }
+
+  /**
+   * Return a new displaced plane; leave this object unchanged.
+   * @param options.vector - XYZ displacement in model units, without normalization.
+   * @see {@link displace}
+   */
+  displace(options: {
+    /** Finite XYZ displacement in model units. */
+    vector: ReadonlyVec3;
+  }): this { return displace({ ...options, object: this }); }
 
   /**
    * Map local XY coordinates onto the plane in world space.

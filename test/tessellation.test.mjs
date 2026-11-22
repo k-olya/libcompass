@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { center, centerRectangle, circle, sketch, Solid, SpatialCurve, SpatialSurface, Surface, spatialLine } from 'libcompass';
+import { center, rectangle, circle, sketch, Solid, SpatialCurve, SpatialSurface, Surface, spatialLine } from 'libcompass';
 import { Tessellation } from '../dist/internal/Tessellation.js';
 import { sampleSurface } from '../dist/internal/surfaceSampling.js';
 import { validateSweepMesh } from '../dist/internal/validateSweepMesh.js';
@@ -12,7 +12,7 @@ function meshVertices(mesh) {
 }
 
 test('all four parameter sides preserve opposite directions and nonuniform source samples', () => {
-  const source = sketch().add(centerRectangle({ center, corner: { x: 1, y: 1 } })).extrude({ length: 2 });
+  const source = sketch().add(rectangle({ center, corner2: { x: 1, y: 1 } })).extrude({ length: 2 });
   const boundaries = new Map(source.boundaries.map(edge => [edge, new SpatialCurve({ at: t => edge.at(t), start: edge.start, end: edge.end })]));
   const supplied = [], snapshots = [];
   let calls = 0;

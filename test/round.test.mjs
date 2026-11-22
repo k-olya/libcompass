@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { vec3 } from 'gl-matrix';
-import { round, circle, centerRectangle, Face, node, planarCurve, setTriangulationResolution,
+import { round, circle, rectangle, Face, node, planarCurve, setTriangulationResolution,
   sketch, Solid, SpatialCurve, SpatialSurface, TrimmedSurface, XY, YZ, ZX } from 'libcompass';
 import { round as operationRound } from 'libcompass/operations/round';
 import { validateSweepMesh } from '../dist/internal/validateSweepMesh.js';
 
 setTriangulationResolution(0.0128);
 const center = { x: 0, y: 0 };
-const cube = (plane = XY, length = 2) => sketch({ plane }).add(centerRectangle({ center, corner: { x: 1, y: 1 } })).extrude({ length });
+const cube = (plane = XY, length = 2) => sketch({ plane }).add(rectangle({ center, corner2: { x: 1, y: 1 } })).extrude({ length });
 const cylinder = (plane = XY, length = 2) => sketch({ plane }).add(circle({ center, radius: 1 })).extrude({ length });
 const close = (a, b, tolerance = 1e-7) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
 const vertical = solid => solid.boundaries.map((boundary, i) => [boundary, i])
@@ -172,7 +172,7 @@ test('invalid options, nonmanifold input, oversized radii and unsupported corner
   assert.throws(() => cylinder().round({ radius: 1.1 }), RangeError);
   assert.throws(() => source.round({ boundaries: [0, 1] }), /one selected edge or all three/);
   // A mixed straight/curved corner is outside this version's supported charts.
-  const mixed = sketch().add(circle({ center, radius: 0.2 }), centerRectangle({ center, corner: { x: 1, y: 1 } })).extrude({ length: 2 });
+  const mixed = sketch().add(circle({ center, radius: 0.2 }), rectangle({ center, corner2: { x: 1, y: 1 } })).extrude({ length: 2 });
   assert.throws(() => mixed.round(), /convex planar solid/);
   assert.equal(source.triangulate(), cached);
   const empty = new Solid({ surfaces: [] });
@@ -181,7 +181,7 @@ test('invalid options, nonmanifold input, oversized radii and unsupported corner
 
 test('opposite edge rounds keep reversed shared rails watertight at the exact limiting radius', () => {
   for (const [plane, length] of [[XY, 20], [XY, -20], [ZX, 20], [YZ, -20]]) {
-    const source = sketch({ plane }).add(centerRectangle({ center, corner: { x: 10, y: 10 } })).extrude({ length });
+    const source = sketch({ plane }).add(rectangle({ center, corner2: { x: 10, y: 10 } })).extrude({ length });
     const pairs = source.surfaces.flatMap(face => [[face.outer[0], face.outer[2]], [face.outer[1], face.outer[3]]])
       .map(pair => pair.map(boundary => source.boundaries.indexOf(boundary)));
     const cached = source.triangulate(), bytes = cached.slice();

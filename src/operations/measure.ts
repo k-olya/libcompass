@@ -73,7 +73,7 @@ function kind(object: Measurable): Kind {
  * @example
  * ```ts
  * const dimensions = measure({ object: part }); // Also prints to the console.
- * const perimeter = measure({ object: centerRectangle({ center, corner: { x: 5, y: 3 } }) });
+ * const perimeter = measure({ object: rectangle({ center, corner2: { x: 5, y: 3 } }) });
  * const area = measure({ object: part.surfaces });
  * ```
  */

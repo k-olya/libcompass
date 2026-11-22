@@ -22,7 +22,7 @@ test('spatial lines copy vec3 data and work with gl-matrix, array helpers and ex
   const part = sketch().add(circle({ center: { x: 0, y: 0 }, radius: 1 })).extrude({ axis, length: 3 });
   close(Math.max(...part.vertices.map(vertex => vertex.position[2])), 3);
   near(axis, [0, 0, 4]); near(axis.origin, [9, 8, 7]);
-  const edge = sketch().add(...rectangle({ start: { x: 0, y: 0 }, end: { x: 2, y: 1 } })).extrude({ length: 1 }).boundaries[0];
+  const edge = sketch().add(...rectangle({ corner1: { x: 0, y: 0 }, corner2: { x: 2, y: 1 } })).extrude({ length: 1 }).boundaries[0];
   const movedEdge = edge.rotate({ axis: Z, angle: 90 }).displace({ vector: [1, 2, 3] });
   const [x, y, z] = edge.start.position;
   near(movedEdge.start.position, [1 - y, 2 + x, 3 + z]);
@@ -79,7 +79,7 @@ test('spatial curve transforms retain authoritative sample parameters and lifted
 
 test('solid transforms preserve shared edge/curve identities, apexes, classes and input caches', () => {
   const sources = [
-    sketch().add(...rectangle({ start: { x: 0, y: 0 }, end: { x: 4, y: 3 } })).extrude({ length: 2 }),
+    sketch().add(...rectangle({ corner1: { x: 0, y: 0 }, corner2: { x: 4, y: 3 } })).extrude({ length: 2 }),
     sketch().add(circle({ center: { x: 0, y: 0 }, radius: 2 })).extrude({ length: 3 }),
     sketch().add(circle({ center: { x: 0, y: 0 }, radius: 2 })).extrude({ length: 3, angle: -45 }),
   ];

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PlanarCurve, SpatialCurve, XY, center, centerRectangle, lineSegment, roundPolyline, sketch, spatialCurve } from 'libcompass';
+import { PlanarCurve, SpatialCurve, XY, center, rectangle, lineSegment, roundPolyline, sketch, spatialCurve } from 'libcompass';
 import { joinPlanarCurves } from '../dist/internal/joinPlanarCurves.js';
 import { sketchProfiles } from '../dist/internal/profiles.js';
 import { validateSweepMesh } from '../dist/internal/validateSweepMesh.js';
@@ -17,7 +17,7 @@ function quarters(rx, ry, reversed = []) {
 }
 
 test('rounded-square arcs extrude a seamless cylinder and round into an exact sphere', () => {
-  const arcs = roundPolyline({ segments: centerRectangle({ center, corner: { x: 10, y: 10 } }), radius: 10 });
+  const arcs = roundPolyline({ segments: rectangle({ center, corner2: { x: 10, y: 10 } }), radius: 10 });
   const source = sketch().add(arcs), elements = [...source.elements];
   const cylinder = source.extrude({ length: 20 });
   assert.deepEqual(source.elements, elements);

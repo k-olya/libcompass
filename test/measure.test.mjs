@@ -4,7 +4,7 @@ import { measure, sketch, rectangle, lineSegment, circle, planarCurve, spatialCu
 
 const capture = object => { const logs = []; const result = measure({ object, log: data => logs.push(data) }); assert.deepEqual(logs, [result]); return result; };
 const close = (a, b, tolerance = 1e-8) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
-const box = () => sketch().add(rectangle({ start: {x: 0, y: 0}, end: {x: 2, y: 3} })).extrude({length: 4});
+const box = () => sketch().add(rectangle({ corner1: {x: 0, y: 0}, corner2: {x: 2, y: 3} })).extrude({length: 4});
 
 test('measure returns and logs one snapshot, with exact segment/edge bounds and summed lengths', () => {
   const segment = lineSegment({start: {x: -1, y: -2}, end: {x: 2, y: 2}});
@@ -20,7 +20,7 @@ test('measure returns and logs one snapshot, with exact segment/edge bounds and 
 });
 
 test('sketch bounds use its placement and include finite construction points, excluding infinite lines', () => {
-  const s = sketch({plane: ZX.displace({vector: [4,5,6]})}).add(rectangle({start: {x:-2,y:-3},end:{x:2,y:3}}));
+  const s = sketch({plane: ZX.displace({vector: [4,5,6]})}).add(rectangle({corner1: {x:-2,y:-3},corner2:{x:2,y:3}}));
   s.add({x:0,y:10}, line({point:{x:100,y:100},direction:[1,0]}));
   assert.deepEqual(capture(s), {boundingBox: {min:[1,5,4],max:[14,5,8],size:[13,0,4]}});
   assert.deepEqual(capture([{x:-1,y:2},{position:[3,4,5]}]).boundingBox, {min:[-1,2,0],max:[3,4,5],size:[4,2,5]});

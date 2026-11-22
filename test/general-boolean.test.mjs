@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { vec3 } from 'gl-matrix';
-import { circle, centerRectangle, extrude, extrudeCut, lineSegment, plane, sketch, solid, spatialSurface,
+import { circle, rectangle, extrude, extrudeCut, lineSegment, plane, sketch, solid, spatialSurface,
   SurfaceRegion, ZX, setTriangulationResolution } from 'libcompass';
 import { validateSweepMesh } from '../dist/internal/validateSweepMesh.js';
 import { BooleanMesh } from '../dist/internal/booleanMesh.js';
@@ -138,7 +138,7 @@ test('drafted rectangular pockets in annular walls retain exact surfaces and sew
       const walls = sketch({ plane: base.surfaces[1] }).add(circle({ center, radius: 6 }), circle({ center, radius: 5 })).extrude({ length: 3 });
       const cached = walls.triangulate(), bytes = cached.slice();
       const cutter = sketch({ plane: ZX.displace({ vector: [0, 4.8, 0] }) })
-        .add(centerRectangle({ center: { x: 3.5, y: 0 }, corner: { x: 2, y: 1 } }));
+        .add(rectangle({ center: { x: 3.5, y: 0 }, corner2: { x: 2, y: 1 } }));
       for (const angle of [-45, -0.1, 0.1, 45]) {
         const cut = walls.extrudeCut({ sketch: cutter, length: 0.6, angle });
         const mesh = new BooleanMesh(cut.triangulate());

@@ -24,7 +24,6 @@ export { LineSegment, lineSegment } from './LineSegment.js';
 export { roundPolyline } from './operations/roundPolyline.js';
 export { polyline } from './operations/polyline.js';
 export { rectangle } from './operations/rectangle.js';
-export { centerRectangle } from './operations/centerRectangle.js';
 export { Circle, circle } from './Circle.js';
 export { arc } from './operations/arc.js';
 export { ellipse } from './operations/ellipse.js';

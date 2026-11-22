@@ -460,13 +460,13 @@ analytic tangent. An arc can join line segments or other curves to bound a profi
 
 ## Planar segment generators
 
-`polyline`, `rectangle`, and `centerRectangle` return `LineSegment[]`, with shared
+`polyline` and `rectangle` return `LineSegment[]`, with shared
 endpoint objects at each join. Pass these arrays directly to a sketch's `add`:
 
 ```ts
 const s = sketch();
-s.add(rectangle({ start: { x: -20, y: -10 }, end: { x: 20, y: 10 } }));
-const centered = centerRectangle({ center: { x: 5, y: 3 }, corner: { x: 10, y: 6 } });
+s.add(rectangle({ corner1: { x: -20, y: 10 }, corner2: { x: 20, y: -10 } }));
+const centered = rectangle({ center: { x: 5, y: 3 }, corner2: { x: 10, y: 6 } });
 const triangle = polyline({ points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: 8 }], loop: true });
 ```
 
@@ -487,7 +487,7 @@ the adjoining arcs. Ordered input retains its traversal order and direction.
 Profile intersections are checked when extruding.
 
 ```ts
-const segments = rectangle({ start: { x: 0, y: 0 }, end: { x: 10, y: 6 } });
+const segments = rectangle({ corner1: { x: 0, y: 0 }, corner2: { x: 10, y: 6 } });
 const rounded = roundPolyline({ segments, radius: 1 });
 const part = sketch().add(rounded).extrude({ length: 2 });
 ```
@@ -496,9 +496,30 @@ Polyline joins consecutive `points`; `loop` defaults to false. With `loop: true`
 it connects the last point to the first and accepts an already repeated closing
 point without adding a zero-length segment. Open polylines need at least two
 points; loops need at least three. Profile validity is checked at extrusion.
-Rectangles align with the sketch's local X/Y axes. `rectangle` uses opposite
-`start` and `end` corners in either order; `centerRectangle` mirrors `corner`
-about `center`. Zero width/height and nonfinite coordinates throw. These are
+`rectangle` unifies the former rectangle and center-rectangle generators. Choose
+one defining set (all coordinates are in the sketch plane):
+
+- `corner1` and `corner2`: opposite corners, in either coordinate order.
+- `center` and either corner: reflect that corner about the center.
+- `width` and `height`, with at most one anchor (`center`, `corner1`, or `corner2`).
+  With no anchor, the center defaults to `{ x: 0, y: 0 }`. With sizes, `corner1`
+  anchors the local upper-left corner, and `corner2` the local lower-right corner.
+
+Optional `rotation` is counterclockwise in degrees about the rectangle's center,
+defaulting to zero. Width and height are true side lengths along its rotated X/Y
+axes, independent of the bounding box. Supplied corners are actual final corner
+points: rotation does not move them. When corners define the size, project their
+separation onto the rotated axes. For example:
+
+```ts
+const rotated = rectangle({ center, width: 20, height: 10, rotation: 30 });
+const anchored = rectangle({ corner1: { x: 5, y: 2 }, width: 20, height: 10, rotation: 30 });
+```
+
+Extra defining points or dimensions throw, including `center` with both corners
+or a corner pair with sizes. Incomplete inputs, nonpositive sizes, nonfinite
+coordinates/rotation, and numerically collapsed dimensions also throw. Supplied
+corners retain their object identities, and inputs are never modified. These are
 operations generating existing line segments, without additional shape classes.
 
 ## Reuse the result
@@ -806,7 +827,7 @@ planes and spatial lines), arbitrary nodes and annotated wrappers are rejected.
 
 ```ts
 const dimensions = measure({ object: part });
-const perimeter = measure({ object: centerRectangle({ center, corner: { x: 5, y: 3 } }) });
+const perimeter = measure({ object: rectangle({ center, corner2: { x: 5, y: 3 } }) });
 const area = measure({ object: part.surfaces });
 const combined = measure({ object: [part, part.displace({ vector: [20, 0, 0] })] });
 ```

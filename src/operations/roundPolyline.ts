@@ -24,7 +24,7 @@ type Contact = { distance: number; point: Point };
  * for both incident rounds. Numerically unrepresentable tangencies also throw.
  * @example
  * ```ts
- * const segments = rectangle({ start: { x: 0, y: 0 }, end: { x: 10, y: 6 } });
+ * const segments = rectangle({ corner1: { x: 0, y: 0 }, corner2: { x: 10, y: 6 } });
  * s.add(roundPolyline({ segments, radius: 1 }));
  * ```
  */

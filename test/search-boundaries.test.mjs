@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Face, Solid, center, centerRectangle, chamfer, circle, edge, node, round, searchBoundaries, sketch } from 'libcompass';
+import { Face, Solid, center, rectangle, chamfer, circle, edge, node, round, searchBoundaries, sketch } from 'libcompass';
 import { searchBoundaries as directSearch } from 'libcompass/operations/searchBoundaries';
 import { validateSweepMesh } from '../dist/internal/validateSweepMesh.js';
 
-const cube = () => sketch().add(centerRectangle({ center, corner: { x: 2, y: 2 } })).extrude({ length: 4 });
+const cube = () => sketch().add(rectangle({ center, corner2: { x: 2, y: 2 } })).extrude({ length: 4 });
 const cylinder = () => sketch().add(circle({ center, radius: 2 })).extrude({ length: 4 });
 
 test('mixed selectors expand original faces and boundaries in first-match order without duplicates', () => {

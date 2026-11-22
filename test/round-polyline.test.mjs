@@ -39,7 +39,7 @@ test('roundPolyline trims a right angle into an exact tangent quarter-circle wit
 });
 
 test('closed rectangles stay ordered and extrude exact rounded profiles', () => {
-  const segments = rectangle({ start: p(0, 0), end: p(10, 6) });
+  const segments = rectangle({ corner1: p(0, 0), corner2: p(10, 6) });
   const result = roundPolyline({ segments, radius: 1 });
   assert.equal(lines(result).length, 4); assert.equal(curves(result).length, 4);
   ordered(result); assert.equal(result.at(-1).end, result[0].start); tangentJoins(result);
@@ -49,7 +49,7 @@ test('closed rectangles stay ordered and extrude exact rounded profiles', () => 
 });
 
 test('fully consumed segments disappear, so rounding a square at half its side creates a circle', () => {
-  const result = roundPolyline({ segments: rectangle({ start: p(-1, -1), end: p(1, 1) }), radius: 1 });
+  const result = roundPolyline({ segments: rectangle({ corner1: p(-1, -1), corner2: p(1, 1) }), radius: 1 });
   assert.equal(result.length, 4); assert.equal(lines(result).length, 0);
   ordered(result); assert.equal(result.at(-1).end, result[0].start);
   for (const curve of result) for (const point of curve.sample()) close(Math.hypot(point.x, point.y), 1);
@@ -57,7 +57,7 @@ test('fully consumed segments disappear, so rounding a square at half its side c
 });
 
 test('shuffled and reversed segments join by coordinates, not point identity', () => {
-  const source = rectangle({ start: p(0, 0), end: p(10, 6) });
+  const source = rectangle({ corner1: p(0, 0), corner2: p(10, 6) });
   const segments = [source[2], source[0], source[3], source[1]].map((segment, i) => i % 2
     ? lineSegment({ start: { ...segment.end }, end: { ...segment.start } })
     : lineSegment({ start: { ...segment.start }, end: { ...segment.end } }));
@@ -73,7 +73,7 @@ test('open ends, missing segments and disconnected components are preserved with
   assert.equal(result[0].start, segments[0].start);
   assert.equal(result[2].end, segments[1].end);
   assert.equal(result[3].start, segments[2].start); assert.equal(result[3].end, segments[2].end);
-  const brokenRectangle = rectangle({ start: p(0, 0), end: p(10, 6) }).slice(0, 3);
+  const brokenRectangle = rectangle({ corner1: p(0, 0), corner2: p(10, 6) }).slice(0, 3);
   const brokenResult = roundPolyline({ segments: brokenRectangle });
   assert.equal(curves(brokenResult).length, 2); ordered(brokenResult);
   assert.deepEqual(roundPolyline({ segments: [] }), []);
@@ -101,7 +101,7 @@ test('straight continuations stay straight but branches and backtracking throw',
 });
 
 test('length checks include both endpoint setbacks and reject oversized rounds without modifying any input', () => {
-  const segments = rectangle({ start: p(0, 0), end: p(2, 2) }), snapshot = JSON.stringify(segments);
+  const segments = rectangle({ corner1: p(0, 0), corner2: p(2, 2) }), snapshot = JSON.stringify(segments);
   assert.throws(() => roundPolyline({ segments, radius: 1.1 }), /insufficient/);
   assert.throws(() => roundPolyline({ segments: [line(0, 0, 0.1, 0), line(0.1, 0, 0.1, 4)], radius: 1 }), /insufficient/);
   assert.equal(JSON.stringify(segments), snapshot);

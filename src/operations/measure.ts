@@ -51,6 +51,8 @@ function kind(object: Measurable): Kind {
 
 /**
  * Measure finite geometry, returning and automatically logging one measurement object.
+ * Accepts geometry or a measurement array directly; use options to set a logger.
+ *
  * @param options.object - One sketch, point/vertex, curve/segment, surface, or solid,
  * or a nonempty array with the same measurement type. Planar and spatial curves
  * may be mixed. Arrays combine bounds and sum lengths, areas or volumes, counting
@@ -77,12 +79,13 @@ function kind(object: Measurable): Kind {
  * const area = measure({ object: part.surfaces });
  * ```
  */
-export function measure({ object, log = result => console.log(result) }: {
+export function measure(options: Measurable | readonly Measurable[] | {
   /** Bounded geometry, or a nonempty flat array sharing one measurement type. */
   object: Measurable | readonly Measurable[];
   /** Optional host output hook; default logs the returned object once to console. */
   log?: (result: Measurement) => void;
 }): Measurement {
+  const { object, log = (result: Measurement) => console.log(result) } = 'object' in options ? options : { object: options };
   if (typeof log !== 'function') throw new TypeError('Measure log must be a function');
   const objects: readonly Measurable[] = Array.isArray(object) ? object : [object as Measurable];
   if (!objects.length) throw new RangeError('Measure requires a nonempty array');

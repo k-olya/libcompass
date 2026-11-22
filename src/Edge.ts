@@ -46,13 +46,15 @@ export class Edge implements SpatialBoundary {
 
   /**
    * Return a new displaced edge; leave this object unchanged.
+   * Accepts a displacement vector directly, or an options object containing vector.
+   *
    * @param options.vector - XYZ displacement in model units, without normalization.
    * @see {@link displace}
    */
-  displace(options: {
+  displace(options: ReadonlyVec3 | {
     /** Finite XYZ displacement in model units. */
     vector: ReadonlyVec3;
-  }): this { return displace({ ...options, object: this }); }
+  }): this { return displace({ object: this, vector: 'vector' in options ? options.vector : options }); }
 
   /**
    * Interpolate between the endpoints, or extrapolate beyond them.

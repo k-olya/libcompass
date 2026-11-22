@@ -24,7 +24,7 @@ export class Profile implements PlanarLoop {
     this.signedArea = signedArea(this.points);
   }
   area(): number { return Math.abs(this.signedArea); }
-  contains({ point }: { point: Point }): boolean { return containsInterior(this.points, point); }
+  contains(options: Point | { point: Point }): boolean { return containsInterior(this.points, 'point' in options ? options.point : options); }
 }
 export const profileArea = (profile: Profile): number => profile.area();
 export const profileAnchor = (profile: Profile): Point => profile.anchor;

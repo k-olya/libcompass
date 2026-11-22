@@ -33,11 +33,14 @@ export class SpatialSurface extends Surface {
 
   /**
    * Create a mathematical surface without replacing it with a mesh.
+   *
+   * Accepts the evaluator function directly, or an options object for boundaries and surface settings.
+   *
    * @param options - Evaluator, physical boundary loops, parameter sides, periodicity, and orientation.
    * @remarks Sides agree with at() using t or 1-t. Periodic seams are not boundaries.
    * Use trimSurface for supported geometric cuts, or TrimmedSurface for an explicit retained chart.
    */
-  constructor({ at, boundaryLoops = [], sides = {}, periodicU = false, periodicV = false, reversed = false, poles = [] }: {
+  constructor(options: ((u: number, v: number) => Vertex) | {
     at: (u: number, v: number) => Vertex;
     boundaryLoops?: readonly (readonly SpatialBoundary[])[];
     sides?: SurfaceSides;
@@ -47,6 +50,7 @@ export class SpatialSurface extends Surface {
     /** Singular vertices retained even when they do not bound a physical edge. */
     poles?: readonly Vertex[];
   }) {
+    const { at, boundaryLoops = [], sides = {}, periodicU = false, periodicV = false, reversed = false, poles = [] } = typeof options === 'function' ? { at: options } : options;
     super({ boundaryLoops });
     this.evaluate = at; this.sides = sides;
     this.poles = poles.map(validateVertex);
@@ -155,12 +159,14 @@ export class SpatialSurface extends Surface {
 /**
  * Create a mathematical surface without replacing it with a mesh.
  *
+ * Accepts the evaluator function directly, or an options object for boundaries and surface settings.
+ *
  * Constructor shorthand for `new SpatialSurface(options)`; returns a new {@link SpatialSurface} instance.
  * @param options - Evaluator, physical boundary loops, parameter sides, periodicity, and orientation.
  * @remarks Sides agree with at() using t or 1-t. Periodic seams are not boundaries.
  * Use trimSurface for supported geometric cuts, or TrimmedSurface for an explicit retained chart.
  */
-export function spatialSurface(options: {
+export function spatialSurface(options: ((u: number, v: number) => Vertex) | {
   /** Surface evaluator on [0, 1]². */
   at: (u: number, v: number) => Vertex;
   /** Physical trim loops, excluding parameter seams. */

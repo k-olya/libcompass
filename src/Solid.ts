@@ -44,9 +44,13 @@ export class Solid extends Memo {
 
   /**
    * Collect surfaces and their shared analytic boundary topology.
+   *
+   * Accepts a surface array directly, or an options object containing surfaces.
+   *
    * @param options - Surfaces to retain; the input array is shallow-copied.
    */
-  constructor({ surfaces }: { surfaces: readonly Surface[] }) {
+  constructor(options: readonly Surface[] | { surfaces: readonly Surface[] }) {
+    const { surfaces } = 'surfaces' in options ? options : { surfaces: options };
     super();
     this.surfaces = [...surfaces];
     this.boundaries = [...new Set(surfaces.flatMap(surface => surface.boundaries))];
@@ -85,13 +89,16 @@ export class Solid extends Memo {
 
   /**
    * Return a new displaced solid; leave this object unchanged.
+   *
+   * Accepts a displacement vector directly, or an options object containing vector.
+   *
    * @param options.vector - XYZ displacement in model units, without normalization.
    * @see {@link displace}
    */
-  displace(options: {
+  displace(options: ReadonlyVec3 | {
     /** Finite XYZ displacement in model units. */
     vector: ReadonlyVec3;
-  }): this { return displace({ ...options, object: this }); }
+  }): this { return displace({ object: this, vector: 'vector' in options ? options.vector : options }); }
 
   /**
    * Return a new chamfered solid, leaving this solid and its cached mesh unchanged.
@@ -133,27 +140,33 @@ export class Solid extends Memo {
 
   /**
    * Return the shared volume of this solid and the tool, leaving both unchanged.
+   *
+   * Accepts the tool solid directly, or an options object containing tool.
+   *
    * @param options.tool - Second solid; only each operand's own surfaces participate.
    * @returns A new solid retaining this solid's child nodes in a fresh array.
    * @throws {@link RangeError} for invalid inputs or unsupported/unresolved intersections.
    * @see {@link intersect}
    */
-  intersect(options: {
+  intersect(options: Solid | {
     /** Second operand; never mutated. */
     tool: Solid;
-  }): Solid { return intersect({ ...options, solid: this }); }
+  }): Solid { return intersect({ solid: this, tool: options instanceof Solid ? options : options.tool }); }
 
   /**
    * Return this solid with the tool's volume removed, leaving both unchanged.
+   *
+   * Accepts the tool solid directly, or an options object containing tool.
+   *
    * @param options.tool - Cutting solid; its child nodes do not participate.
    * @returns A new solid retaining this solid's child nodes in a fresh array.
    * @throws {@link RangeError} for invalid inputs or unsupported/unresolved intersections.
    * @see {@link difference}
    */
-  difference(options: {
+  difference(options: Solid | {
     /** Cutting solid; never mutated. */
     tool: Solid;
-  }): Solid { return difference({ ...options, solid: this }); }
+  }): Solid { return difference({ solid: this, tool: options instanceof Solid ? options : options.tool }); }
 
   /**
    * Extrude a sketch and subtract it from this solid without modifying either.
@@ -188,11 +201,13 @@ export class Solid extends Memo {
 /**
  * Collect surfaces and their shared analytic boundary topology.
  *
+ * Accepts a surface array directly, or an options object containing surfaces.
+ *
  * Constructor shorthand for `new Solid(options)`; returns a new {@link Solid} instance.
  *
  * @param options - Surfaces to retain; the input array is shallow-copied.
  */
-export function solid(options: {
+export function solid(options: readonly Surface[] | {
   /** Planar faces and spatial surfaces, retaining their identities. */
   surfaces: readonly Surface[];
 }): Solid { return new Solid(options); }

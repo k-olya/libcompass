@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Circle, PlanarCurve, Plane, Sketch, SpatialCurve, TRIANGULATION_RESOLUTION, planarCurve } from 'libcompass';
+import { Circle, PlanarCurve, Plane, Sketch, SpatialCurve, TRIANGULATION_RESOLUTION, planarCurve, circle } from 'libcompass';
 import { setTriangulationResolution } from 'libcompass';
 
 // Precision regressions run at the finest supported setting.
@@ -164,4 +164,25 @@ test('midpoint deviation controls dyadic subdivision for both planar and spatial
   }
   assert.equal(Circle.prototype.sampleParameters, PlanarCurve.prototype.sampleParameters);
   assert.equal(new Circle({ center: { x: 0, y: 0 }, radius: 10 }).sample().length, 257);
+});
+
+
+test('circle and Circle default their optional center to local (0, 0)', () => {
+  for (const create of [options => new Circle(options), circle]) {
+    for (const options of [{ radius: 2 }, { radius: 2, center: undefined }]) {
+      const curve = create(options);
+      assert.deepEqual(curve.center, { x: 0, y: 0 });
+      assert.deepEqual(curve.at(0), { x: 2, y: 0 });
+      close(curve.at(0.25).x, 0); close(curve.at(0.25).y, 2);
+      assert.equal(curve.start, curve.end);
+      const body = new Sketch().add(curve).extrude({ length: 3 });
+      assert.equal(body.surfaces.length, 3);
+      assert.ok(body.triangulate().length > 0);
+    }
+    const center = Object.freeze({ x: 3, y: -4 });
+    const curve = create({ center, radius: 2 });
+    assert.equal(curve.center, center);
+    assert.deepEqual(curve.at(0), { x: 5, y: -4 });
+    assert.throws(() => create({ radius: 0 }), RangeError);
+  }
 });

@@ -27,15 +27,18 @@ export class SpatialCurve implements SpatialBoundary {
   /**
    * Create a parametric curve without tessellating it.
    *
+   * Accepts the evaluator function directly, or an options object for tangent and endpoint settings.
+   *
    * @param options - Exact evaluator, optional tangent evaluator, and shared endpoint objects.
    * @throws {@link RangeError} if endpoint coordinates are nonfinite or disagree with the evaluator.
    */
-  constructor({ at, tangent, start, end }: {
+  constructor(options: ((t: number) => Vertex) | {
     at: (t: number) => Vertex;
     tangent?: (t: number) => ReadonlyVec3;
     start?: Vertex;
     end?: Vertex;
   }) {
+    const { at, tangent, start, end } = typeof options === 'function' ? { at: options } : options;
     this.evaluate = at;
     this.evaluateTangent = tangent;
     const a = validateVertex(at(0)), b = validateVertex(at(1));
@@ -63,13 +66,16 @@ export class SpatialCurve implements SpatialBoundary {
 
   /**
    * Return a new displaced spatial curve; leave this object unchanged.
+   *
+   * Accepts a displacement vector directly, or an options object containing vector.
+   *
    * @param options.vector - XYZ displacement in model units, without normalization.
    * @see {@link displace}
    */
-  displace(options: {
+  displace(options: ReadonlyVec3 | {
     /** Finite XYZ displacement in model units. */
     vector: ReadonlyVec3;
-  }): this { return displace({ ...options, object: this }); }
+  }): this { return displace({ object: this, vector: 'vector' in options ? options.vector : options }); }
 
   /** Local definition, when constructed with fromPlanarCurve. */
   get planarCurve(): PlanarCurve | undefined { return this.planar?.curve; }
@@ -78,6 +84,8 @@ export class SpatialCurve implements SpatialBoundary {
 
   /**
    * Lift any planar curve into world space without sampling it.
+   *
+   * Accepts a planar curve directly, or an options object for placement and shared endpoints.
    *
    * @remarks
    * The placement frame is copied. Curves retain their evaluator; treat its
@@ -88,7 +96,7 @@ export class SpatialCurve implements SpatialBoundary {
    * one endpoint vertex; open curves retain distinct endpoints.
    * @throws {@link TypeError} if curve has no at(t) evaluator.
    */
-  static fromPlanarCurve({ curve, plane = new Plane(), start, end }: {
+  static fromPlanarCurve(options: Pick<PlanarCurve, 'at'> | {
     curve: Pick<PlanarCurve, 'at'>;
     plane?: Plane;
     /** Optional shared world-space vertex at zero; must agree with the evaluator. */
@@ -96,6 +104,7 @@ export class SpatialCurve implements SpatialBoundary {
     /** Optional shared world-space vertex at one; must agree with the evaluator. */
     end?: Vertex;
   }): SpatialCurve {
+    const { curve, plane = new Plane(), start, end } = 'curve' in options ? options : { curve: options };
     if (typeof curve?.at !== 'function') throw new TypeError('A planar curve needs an at(t) evaluator');
     const definition = curve instanceof PlanarCurve ? curve : new PlanarCurve({ at: t => curve.at(t) });
     const frame = new Plane({ a: [...plane.origin] as [number, number, number],
@@ -197,12 +206,14 @@ export class SpatialCurve implements SpatialBoundary {
 /**
  * Create a parametric curve without tessellating it.
  *
+ * Accepts the evaluator function directly, or an options object for tangent and endpoint settings.
+ *
  * Constructor shorthand for `new SpatialCurve(options)`; returns a new {@link SpatialCurve} instance.
  *
  * @param options - Exact evaluator, optional tangent evaluator, and shared endpoint objects.
  * @throws {@link RangeError} if endpoint coordinates are nonfinite or disagree with the evaluator.
  */
-export function spatialCurve(options: {
+export function spatialCurve(options: ((t: number) => Vertex) | {
   /** Optional exact tangent evaluator; otherwise finite differences are used. */
   tangent?: (t: number) => ReadonlyVec3;
   /** World-space evaluator on [0, 1]; responsible for the curve's parameterization. */

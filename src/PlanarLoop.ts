@@ -6,5 +6,5 @@ export interface PlanarLoop {
   /** Positive enclosed area in square model units. */
   area(): number;
   /** Test strict interior membership; boundary points are excluded. */
-  contains(options: { point: Point }): boolean;
+  contains(options: Point | { point: Point }): boolean;
 }

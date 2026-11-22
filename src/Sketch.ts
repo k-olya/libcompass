@@ -71,17 +71,21 @@ export class Sketch {
 
   /**
    * Sweep filled regions along a smooth spatial curve with transported orientation.
+   * Accepts the spatial path directly, or an options object containing curve.
+   *
    * @param options - Spatial path; local (0, 0) follows it and its tangent is the sketch normal.
    * @throws {@link RangeError} for unsupported paths or detected folds and intersections.
    * @see {@link extrudeAlongCurve}
    */
-  extrudeAlongCurve({ curve }: {
+  extrudeAlongCurve(options: SpatialCurve | {
     /** Smooth regular spatial path, open or smoothly closed. */
     curve: SpatialCurve;
-  }): Solid { return extrudeAlongCurve({ sketch: this, curve }); }
+  }): Solid { return extrudeAlongCurve({ sketch: this, curve: 'curve' in options ? options.curve : options }); }
 
   /**
    * Extrude all filled regions, preserving holes and disconnected components.
+   *
+   * Accepts a signed length directly, or an options object for axis and draft settings.
    *
    * @param options - Signed length and optional world-space axis; curves remain analytic.
    * @param options.axis - Finite, nonzero direction, normalized internally without
@@ -95,7 +99,7 @@ export class Sketch {
    * @throws {@link RangeError} if the axis, length, or profiles are invalid.
    * @see {@link extrude}
    */
-  extrude({ axis, length, angle: angleDEG }: {
+  extrude(options: number | {
     /** World-space direction, normalized internally; defaults to this sketch's plane normal. */
     axis?: ReadonlyVec3;
     /** Finite, nonzero signed length; negative values reverse the extrusion. */
@@ -103,6 +107,7 @@ export class Sketch {
     /** Draft angle in degrees; positive expands, negative contracts; defaults to zero. */
     angle?: number;
   }): Solid {
+    const { axis, length, angle: angleDEG } = typeof options === 'number' ? { length: options } : options;
     return extrude({ sketch: this, axis, length, angle: angleDEG });
   }
 }

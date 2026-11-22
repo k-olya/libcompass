@@ -2,7 +2,11 @@
 
 - Put public operations on CAD math objects (solids, sketches, curves, planes,
   and topology) in `src/operations/`, such as `extrude`. Operations take named
-  options objects and are re-exported from `src/index.ts`.
+  options objects and are re-exported from `src/index.ts`. Approved single-required
+  parameter APIs additionally accept that value directly, preserving their options
+  forms. Distinguish the forms by type, class or the named wrapper field; do not
+  guess between optional settings. Constructor shorthands and their constructors
+  must accept the same argument forms.
 - Reserve `src/util/` for general helpers on other data, such as `functionalize`
   and the packed-coordinate `transformMat4` utility. These are distinct from CAD
   operations and may use positional arguments.

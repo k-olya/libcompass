@@ -37,13 +37,15 @@ export abstract class Surface {
 
   /**
    * Return a new displaced surface, retaining its built-in kind, trims and topology.
+   * Accepts a displacement vector directly, or an options object containing vector.
+   *
    * @param options.vector - XYZ displacement in model units, without normalization.
    * @see {@link displace}
    */
-  displace(options: {
+  displace(options: ReadonlyVec3 | {
     /** Finite XYZ displacement in model units. */
     vector: ReadonlyVec3;
-  }): this { return displace({ ...options, object: this }); }
+  }): this { return displace({ object: this, vector: 'vector' in options ? options.vector : options }); }
 
   protected copyTransformed(_context: RigidContext): Surface {
     throw new TypeError('Transform requires a supported mathematical surface');

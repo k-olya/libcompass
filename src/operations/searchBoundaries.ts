@@ -17,6 +17,8 @@ export type BoundarySelector = number | SpatialBoundary | Face | BoundaryPredica
 
 /**
  * Find unique original boundaries using mixed topology selectors.
+ * Accepts a solid directly to select all boundaries, or an options object with selectors.
+ *
  * @param options.solid - Solid whose own boundaries and planar faces are searched.
  * @param options.boundaries - Boundary indices, boundary objects, planar Face
  * objects, and predicates, as one selector or a mixed list. Omitted or [] selects all boundaries. Face selectors
@@ -41,12 +43,13 @@ export type BoundarySelector = number | SpatialBoundary | Face | BoundaryPredica
  * const rounded = part.round({ radius: 0.5, boundaries: rims });
  * ```
  */
-export function searchBoundaries({ solid, boundaries = [] }: {
+export function searchBoundaries(options: Solid | {
   /** Input solid; never modified. */
   solid: Solid;
   /** One selector or a mixed list; omitted or [] means all boundaries. */
   boundaries?: BoundarySelector | readonly BoundarySelector[];
 }): SpatialBoundary[] {
+  const { solid, boundaries = [] } = options instanceof Solid ? { solid: options } : options;
   if (!(solid instanceof Solid)) throw new TypeError('Boundary search requires a Solid');
   const selectors: readonly BoundarySelector[] = Array.isArray(boundaries) ? boundaries : [boundaries as BoundarySelector];
   if (!selectors.length) return [...solid.boundaries];

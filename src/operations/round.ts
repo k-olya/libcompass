@@ -9,6 +9,8 @@ import { searchBoundaries, type BoundarySelector } from './searchBoundaries.js';
 
 /**
  * Return a new solid with constant-radius tangent rounds on selected boundaries.
+ * Accepts a solid directly for the default radius and all boundaries, or an options object.
+ *
  * @param options.solid - Input solid; its geometry, children and cached mesh are unchanged.
  * @param options.radius - Positive rolling-ball radius in model units; defaults to 0.5.
  * @param options.boundaries - Mixed original boundary indices/objects, planar
@@ -28,7 +30,7 @@ import { searchBoundaries, type BoundarySelector } from './searchBoundaries.js';
  * scene.add(rounded);
  * ```
  */
-export function round({ solid, radius = 0.5, boundaries = [] }: {
+export function round(options: Solid | {
   /** Solid to round; never modified. */
   solid: Solid;
   /** Positive radius in model units; defaults to 0.5. */
@@ -36,6 +38,7 @@ export function round({ solid, radius = 0.5, boundaries = [] }: {
   /** One selector or a mixed list resolved by searchBoundaries; omitted or [] means all. */
   boundaries?: BoundarySelector | readonly BoundarySelector[];
 }): Solid {
+  const { solid, radius = 0.5, boundaries = [] } = options instanceof Solid ? { solid: options } : options;
   if (!(solid instanceof Solid)) throw new TypeError('Round requires a Solid');
   if (!Number.isFinite(radius) || radius <= 0) throw new RangeError('Round radius must be finite and positive');
   const selected = searchBoundaries({ solid, boundaries });

@@ -26,15 +26,18 @@ export class PlanarCurve implements PlanarLoop {
   /**
    * Create a parametric planar curve without tessellating it.
    *
+   * Accepts the evaluator function directly, or an options object for tangent and endpoint settings.
+   *
    * @param options - Exact evaluator, optional tangent evaluator, and shared endpoint objects.
    * @throws {@link RangeError} if endpoint coordinates are nonfinite or disagree with the evaluator.
    */
-  constructor({ at, tangent, start, end }: {
+  constructor(options: ((t: number) => Point) | {
     at: (t: number) => Point;
     tangent?: (t: number) => ReadonlyVec2;
     start?: Point;
     end?: Point;
   }) {
+    const { at, tangent, start, end } = typeof options === 'function' ? { at: options } : options;
     this.evaluate = at;
     this.evaluateTangent = tangent;
     const a = validatePoint(at(0)), b = validatePoint(at(1));
@@ -104,7 +107,8 @@ export class PlanarCurve implements PlanarLoop {
   }
 
   /** Approximate strict interior containment against the sampled loop. */
-  contains({ point }: { point: Point }): boolean {
+  contains(options: Point | { point: Point }): boolean {
+    const { point } = 'point' in options ? options : { point: options };
     if (!this.isLoop()) throw new RangeError('Containment requires a closed planar loop');
     return containsInterior(this.sample().slice(0, -1), validatePoint(point));
   }
@@ -141,12 +145,14 @@ export class PlanarCurve implements PlanarLoop {
 /**
  * Create a parametric planar curve without tessellating it.
  *
+ * Accepts the evaluator function directly, or an options object for tangent and endpoint settings.
+ *
  * Constructor shorthand for `new PlanarCurve(options)`; returns a new {@link PlanarCurve} instance.
  *
  * @param options - Exact evaluator, optional tangent evaluator, and shared endpoint objects.
  * @throws {@link RangeError} if endpoint coordinates are nonfinite or disagree with the evaluator.
  */
-export function planarCurve(options: {
+export function planarCurve(options: ((t: number) => Point) | {
   /** Local XY evaluator on [0, 1]; responsible for the curve's parameterization. */
   at: (t: number) => Point;
   /** Optional exact tangent evaluator; otherwise tangent() uses finite differences. */

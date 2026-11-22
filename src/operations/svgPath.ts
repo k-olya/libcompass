@@ -3,6 +3,8 @@ import { validatePoint, type Point } from '../Point.js';
 
 /**
  * Create planar curves from SVG path data using the browser's native geometry APIs.
+ * Accepts the SVG d string directly, or an options object for placement and scale.
+ *
  * @param options.d - SVG path data, including open or closed subpaths.
  * @param options.position - Translation in local XY coordinates; defaults to { x: 0, y: 0 }.
  * @param options.scale - Per-axis scale about local (0, 0); defaults to { x: 1, y: 1 }.
@@ -30,7 +32,7 @@ import { validatePoint, type Point } from '../Point.js';
  * scene.add(sketch().add(outline).extrude({ length: 3 }));
  * ```
  */
-export function svgPath({ d, position = { x: 0, y: 0 }, scale = { x: 1, y: 1 } }: {
+export function svgPath(options: string | {
   /** SVG d attribute, in model units; disconnected subpaths return separate curves. */
   d: string;
   /** Local XY translation, applied after scaling; defaults to zero. */
@@ -38,6 +40,7 @@ export function svgPath({ d, position = { x: 0, y: 0 }, scale = { x: 1, y: 1 } }
   /** Local XY scale, including negative values for mirroring; defaults to one. */
   scale?: Point;
 }): PlanarCurve | PlanarCurve[] {
+  const { d, position = { x: 0, y: 0 }, scale = { x: 1, y: 1 } } = typeof options === 'string' ? { d: options } : options;
   if (typeof d !== 'string') throw new TypeError('SVG path d must be a string');
   if (!d.trim()) throw new RangeError('SVG path d must not be empty');
   validatePoint(position); validatePoint(scale);

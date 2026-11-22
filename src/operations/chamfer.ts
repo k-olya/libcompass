@@ -10,6 +10,8 @@ import { searchBoundaries, type BoundarySelector } from './searchBoundaries.js';
 /**
  * Return a new solid with bevels on selected boundaries, without mutating the input.
  *
+ * Accepts a solid directly for default chamfer settings, or an options object.
+ *
  * @param options - Input solid, setback length, angle, and boundary selectors.
  * @param options.solid - Solid whose own surfaces are chamfered; child nodes are retained unchanged.
  * @param options.length - Positive setback distance on the first adjoining surface
@@ -34,7 +36,7 @@ import { searchBoundaries, type BoundarySelector } from './searchBoundaries.js';
  * scene.add(beveled);
  * ```
  */
-export function chamfer({ solid, length = 0.5, angle: angleDEG = 45, boundaries = [] }: {
+export function chamfer(options: Solid | {
   /** Input solid; never mutated. Child nodes are retained unchanged. */
   solid: Solid;
   /** Positive setback on the first adjoining surface; defaults to 0.5. */
@@ -44,6 +46,7 @@ export function chamfer({ solid, length = 0.5, angle: angleDEG = 45, boundaries 
   /** One selector or a mixed list resolved by searchBoundaries; omitted or [] means all. */
   boundaries?: BoundarySelector | readonly BoundarySelector[];
 }): Solid {
+  const { solid, length = 0.5, angle: angleDEG = 45, boundaries = [] } = options instanceof Solid ? { solid: options } : options;
   if (!(solid instanceof Solid)) throw new TypeError('Chamfer requires a Solid');
   if (!Number.isFinite(length) || length <= 0) throw new RangeError('Chamfer length must be finite and positive');
   if (!Number.isFinite(angleDEG) || angleDEG <= 0 || angleDEG >= 90) throw new RangeError('Chamfer angle must be between 0 and 90 degrees');

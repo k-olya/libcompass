@@ -3,6 +3,8 @@ import { validatePoint, type Point } from '../Point.js';
 
 /**
  * Join consecutive planar points with line segments.
+ * Accepts a point array directly for an open polyline; use options to set loop.
+ *
  * @param options.points - Ordered points; retained by reference without changing the array.
  * @param options.loop - Close the last point to the first; defaults to false.
  * A repeated closing point is accepted without creating an extra segment.
@@ -15,12 +17,13 @@ import { validatePoint, type Point } from '../Point.js';
  * s.add(...polyline({ points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: 8 }], loop: true }));
  * ```
  */
-export function polyline({ points, loop = false }: {
+export function polyline(options: readonly Point[] | {
   /** Consecutive local XY points; endpoints are retained by reference. */
   points: readonly Point[];
   /** Connect the last point to the first to make a polygon loop; defaults to false. */
   loop?: boolean;
 }): LineSegment[] {
+  const { points, loop = false } = 'points' in options ? options : { points: options };
   points.forEach(validatePoint);
   const first = points[0], last = points.at(-1);
   const vertices = loop && first && last && first.x === last.x && first.y === last.y ? points.slice(0, -1) : points;

@@ -16,12 +16,15 @@ export class Circle extends PlanarCurve {
   /** Positive radius in model units. */
   readonly radius: number;
   /**
-   * Create a circle with a positive radius.
+   * Create a circle with a positive radius; its center defaults to (0, 0).
    *
-   * @param options - Local XY center and positive radius in model units.
+   * Accepts a radius directly, or an options object to specify the center.
+   *
+   * @param options - Positive radius in model units and optional local XY center (default (0, 0)).
    * @throws {@link RangeError} if the center is nonfinite or the radius is not positive and finite.
    */
-  constructor({ center, radius }: { center: Point; radius: number }) {
+  constructor(options: number | { center?: Point; radius: number }) {
+    const { center = { x: 0, y: 0 }, radius } = typeof options === 'number' ? { radius: options } : options;
     validatePoint(center);
     if (!Number.isFinite(radius) || radius <= 0) {
       throw new RangeError('Circle radius must be positive and finite');
@@ -38,16 +41,18 @@ export class Circle extends PlanarCurve {
 }
 
 /**
- * Create a circle with a positive radius.
+ * Create a circle with a positive radius; its center defaults to (0, 0).
+ *
+ * Accepts a radius directly, or an options object to specify the center.
  *
  * Constructor shorthand for `new Circle(options)`; returns a new {@link Circle} instance.
  *
- * @param options - Local XY center and positive radius in model units.
+ * @param options - Positive radius in model units and optional local XY center (default (0, 0)).
  * @throws {@link RangeError} if the center is nonfinite or the radius is not positive and finite.
  */
-export function circle(options: {
-  /** Center in sketch coordinates, retained by reference. */
-  center: Point;
+export function circle(options: number | {
+  /** Center in sketch coordinates, retained by reference; defaults to (0, 0). */
+  center?: Point;
   /** Positive radius in model units. */
   radius: number;
 }): Circle { return new Circle(options); }

@@ -28,17 +28,20 @@ export class Face extends Surface {
   /**
    * Create a planar face from ordered, closed boundary loops.
    *
+   * Accepts an outer boundary array directly, or an options object for holes and placement.
+   *
    * @param options - Outer trim, optional holes, and optional oriented plane.
    * Without a plane, orientation follows the outer trim's traversal.
    * @throws {@link RangeError} if trims are open, degenerate, or nonplanar.
    * Trim separation is checked on sampled polylines; tessellation is checked
    * when triangulating.
    */
-  constructor({ outer, holes = [], plane }: {
+  constructor(options: readonly SpatialBoundary[] | {
     outer: readonly SpatialBoundary[];
     holes?: readonly (readonly SpatialBoundary[])[];
     plane?: Plane;
   }) {
+    let { outer, holes = [], plane } = 'outer' in options ? options : { outer: options };
     super({ boundaryLoops: [outer, ...holes] });
     const anchors = (loop: readonly SpatialBoundary[]) => orientLoop(loop).flatMap(({ boundary, reversed }) => {
       const points = boundary.sample();
@@ -85,6 +88,8 @@ export class Face extends Surface {
 /**
  * Create a planar face from ordered, closed boundary loops.
  *
+ * Accepts an outer boundary array directly, or an options object for holes and placement.
+ *
  * Constructor shorthand for `new Face(options)`; returns a new {@link Face} instance.
  *
  * @param options - Outer trim, optional holes, and optional oriented plane.
@@ -93,7 +98,7 @@ export class Face extends Surface {
  * Trim separation is checked on sampled polylines; tessellation is checked
  * when triangulating.
  */
-export function face(options: {
+export function face(options: readonly SpatialBoundary[] | {
   /** Ordered, closed outer loop of shared edges and spatial curves. */
   outer: readonly SpatialBoundary[];
   /** Ordered, closed hole loops; defaults to none. */

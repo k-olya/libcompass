@@ -54,7 +54,7 @@ Points and infinite lines are construction geometry and do not create boundaries
 | `new Line({ point, direction })` | An infinite line with a `ReadonlyVec2` direction; `at(t)` returns `point + t * direction`. |
 | `new LineSegment({ start, end })` | Two endpoints; `at(0)` and `at(1)` return their coordinates. |
 | `new PlanarCurve({ at, tangent, start, end })` | An exact local XY curve on [0, 1], with optional tangent evaluator and shared endpoints. |
-| `new Circle({ center, radius })` | An analytic `PlanarCurve`; `at(t)` traces one counterclockwise turn on [0, 1]. |
+| `new Circle({ radius })` | Optional `center` defaults to `{ x: 0, y: 0 }`. An analytic `PlanarCurve`; `at(t)` traces one counterclockwise turn on [0, 1]. |
 | `new Plane({ a, b, c })` | Three noncollinear world points, each a `Vertex` or `ReadonlyVec3`. Defaults to XY. |
 | `new Sketch({ plane })` | Local 2D geometry on a world-space plane; `add(...elements)` returns the sketch. |
 | `new Edge({ start, end })` | A boundary edge retaining its vertex objects. |
@@ -522,6 +522,44 @@ coordinates/rotation, and numerically collapsed dimensions also throw. Supplied
 corners retain their object identities, and inputs are never modified. These are
 operations generating existing line segments, without additional shape classes.
 
+## Direct-argument forms
+
+Selected APIs accept their sole required value directly. Their options-object
+forms remain available whenever optional settings are needed:
+
+```ts
+const profile = circle(5);                  // circle({ radius: 5 })
+const sameProfile = new Circle(5);
+const outline = svgPath('M0 0L10 0L10 10Z');
+const segments = polyline([{ x: 0, y: 0 }, { x: 10, y: 0 }]); // Open by default.
+const curve = planarCurve(t => ({ x: t, y: t * t }));
+const path = spatialCurve(t => ({ position: [0, 0, 10 * t] }));
+const patch = spatialSurface((u, v) => ({ position: [u, v, u * v] }));
+const part = sketch().add(profile).extrude(10);
+const swept = sketch().add(profile).extrudeAlongCurve(path);
+const lifted = SpatialCurve.fromPlanarCurve(profile);
+const moved = part.displace([10, 0, 0]);
+const contained = profile.contains({ x: 0, y: 0 });
+const common = part.intersect(moved);
+const cut = part.difference(moved);
+measure(part);                             // Logs once and returns measurements.
+scene.add(annotate(part));                  // Default name, color and alpha.
+```
+
+`face(outer)` / `new Face(outer)` accept a boundary array, and
+`solid(surfaces)` / `new Solid(surfaces)` accept a surface array. `PlanarCurve`,
+`SpatialCurve` and `SpatialSurface` constructors also accept their evaluator
+functions directly. `chamfer(part)` and `round(part)` use default settings on all
+boundaries, while `searchBoundaries(part)` returns all original boundaries.
+Displacement vectors may be ordinary readonly arrays or typed vectors; this
+method form applies to planes, spatial lines/curves, edges, solids and surfaces.
+
+Direct values are distinguished from options by type, class or the named wrapper
+field. Standalone `extrude` still requires `{ sketch, length, ... }`; only the
+sketch method can take a length alone. Likewise, optional-only methods such as
+`part.round({ radius: 1 })` keep their options form. Unlisted functions retain
+their existing signatures.
+
 ## Reuse the result
 
 `Solid.surfaces` contains `Face`, `SpatialSurface` and `SurfaceRegion` instances, all extending
@@ -615,7 +653,7 @@ tests.
 ```ts
 import { Circle, Plane, SpatialCurve } from 'libcompass';
 
-const local = new Circle({ center: { x: 0, y: 0 }, radius: 5 });
+const local = new Circle({ radius: 5 });
 const quarterTurn = local.at(0.25);
 const rim = SpatialCurve.fromPlanarCurve({ curve: local, plane: new Plane() });
 const vertices = rim.sample(); // First and last vertices are the same loop endpoint.
@@ -717,11 +755,13 @@ Treat the shared lines, their origins, and the default planes as immutable.
 ```ts
 import { XY, Z, circle, sketch, extrude } from 'libcompass';
 
-const s = sketch({ plane: XY }).add(circle({ center: { x: 0, y: 0 }, radius: 2 }));
+const s = sketch({ plane: XY }).add(circle({ radius: 2 }));
 const body = extrude({ sketch: s, axis: Z, length: 1 }); // Extrude one unit along +Z.
 ```
 
-`center` is a ready-to-use `Point`, for example `circle({ center, radius: 2 })`.
+`circle({ radius: 2 })` and `new Circle({ radius: 2 })` default to local (0, 0).
+An explicit `center` is retained by reference; the shared `center` constant is also
+a ready-to-use `Point`, for example `circle({ center, radius: 2 })`.
 `origin` is a zero vec3, for example `spatialLine({ direction: Z, origin })`.
 Treat these shared coordinates as immutable too.
 

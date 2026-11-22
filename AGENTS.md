@@ -46,6 +46,17 @@
 - Sketches may contain multiple closed profiles, holes, and islands. Use nesting
   (even-odd fill) to determine material. Points and infinite lines are construction
   geometry and do not bound a profile.
+- `svgPath` delegates SVG commands and geometry to browser APIs, keeping path
+  elements detached. Split only moveto boundaries to detect gaps, preserving
+  relative current points and connected sections. Return one PlanarCurve or an
+  array across gaps; bake copied 2D scale and position into the evaluator.
+- `measure` accepts finite math geometry, excluding infinite objects and generic
+  nodes. Use curve sample() overrides and current-resolution surface tessellation
+  for approximate bounds/length/area/volume. Homogeneous measurement arrays combine
+  bounds and sum quantities per entry, without boolean union. Sketches use world
+  placement and ignore infinite construction lines. Solid measurements exclude
+  child nodes and do not change memo caches. Return a snapshot and log it once;
+  hosts can provide the log callback for their script console.
 - During extrusion profile assembly, join connected open PlanarCurves whose
   oriented endpoint tangents agree into exact piecewise curves. Smooth runs may
   remain open or close into loops; already-closed input curves never join other

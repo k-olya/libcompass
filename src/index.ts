@@ -28,6 +28,8 @@ export { centerRectangle } from './operations/centerRectangle.js';
 export { Circle, circle } from './Circle.js';
 export { arc } from './operations/arc.js';
 export { ellipse } from './operations/ellipse.js';
+export { svgPath } from './operations/svgPath.js';
+export { measure, type Measurable, type Measurement, type BoundingBox } from './operations/measure.js';
 export { PlanarCurve, planarCurve } from './PlanarCurve.js';
 export type { PlanarLoop } from './PlanarLoop.js';
 export { Plane, plane } from './Plane.js';

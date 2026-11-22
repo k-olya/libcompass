@@ -396,6 +396,36 @@ point. Ellipses provide analytic tangents and use the ordinary adaptive sampling
 profile, lifting, and extrusion paths without new curve-type cases. Nonfinite
 inputs and nonpositive radii throw.
 
+## SVG paths
+
+`svgPath({ d, position, scale })` uses the browser's native SVG path parser and
+geometry methods. It returns one `PlanarCurve`, or an array of curves when gaps
+separate subpaths; connected sections remain one curve. `at(t)` follows native
+normalized path length, then applies `position + scale * point` directly.
+`position` defaults to `{ x: 0, y: 0 }`, and `scale` to `{ x: 1, y: 1 }`.
+Negative scales mirror axes. SVG Y values are preserved unless you flip Y.
+
+```ts
+const outline = svgPath({
+  d: 'M 0 0 C 0 10 10 10 10 0 Z',
+  position: { x: -5, y: 0 },
+  scale: { x: 1, y: -1 },
+});
+scene.add(sketch().add(outline).extrude({ length: 3 }));
+```
+
+This operation requires browser SVG geometry APIs; importing the library in
+Node remains supported. The private path element stays detached from the DOM.
+Only `d` is used, with no stroke, caps, joins, or other SVG primitives. Open
+paths remain open; closed paths share their endpoint. Relative moveto commands
+retain the preceding current point, including after closepath. Pass the result
+directly to `sketch.add()`, which accepts both curves and arrays, including holes
+and islands. Empty paths or paths with no positive-length geometry throw;
+zero-length subpaths are skipped. Malformed syntax follows the browser's parser.
+Sampling, lifting and extrusion use the ordinary curve methods, including their
+midpoint-sampling limitations for oscillatory curves. Geometric precision is
+limited by the browser's path geometry implementation.
+
 ## Circular arcs
 
 `arc` returns a mathematical `PlanarCurve`, using the normal adaptive sampling
@@ -766,6 +796,40 @@ arrays are accepted. `SpatialLine` stays intact as geometry rather than flatteni
 into its numeric coordinates. Geometry types,
 exact evaluators, shared topology inside each solid, and sampling overrides are
 retained by the existing transformations.
+
+## Measurements
+
+`measure({ object })` returns a measurement object and logs that same object
+automatically. It accepts sketches, finite points/vertices, planar and spatial
+curves, line segments/edges, surfaces, and solids. Infinite geometry (including
+planes and spatial lines), arbitrary nodes and annotated wrappers are rejected.
+
+```ts
+const dimensions = measure({ object: part });
+const perimeter = measure({ object: centerRectangle({ center, corner: { x: 5, y: 3 } }) });
+const area = measure({ object: part.surfaces });
+const combined = measure({ object: [part, part.displace({ vector: [20, 0, 0] })] });
+```
+
+Every result has `boundingBox: { min, max, size }`, with three-element XYZ
+arrays. Curves and segments additionally return `length`, surfaces return
+`surfaceArea`, and solids return `volume`; sketches and points return bounds
+only. Standalone planar geometry is measured in XY at Z = 0. Sketch bounds use
+the sketch's placement plane, include finite construction points, and ignore
+infinite construction lines. Units are model units, square units and cubic units.
+
+Nonempty arrays must share the same measurement type. Their bounds are combined
+and their lengths, areas or volumes summed independently; repeated entries and
+overlapping geometry are counted separately. Empty geometry has null bounds and
+zero area/volume; empty arrays are rejected. A solid is measured from its own
+surfaces, excluding child nodes. No input geometry or memo caches are changed.
+
+Curve sampling respects `.sample()` overrides, and surfaces are tessellated at
+the current `TRIANGULATION_RESOLUTION`. Curved bounds, lengths, areas and volumes
+are approximate at that resolution, with the usual limitations for oscillations
+hidden between samples. Volume assumes closed, consistently oriented solids.
+An optional `log: result => ...` callback lets hosts route the automatic output
+to their console; by default it calls `console.log` once.
 
 ## Scene graph and utilities
 

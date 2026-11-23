@@ -45,7 +45,7 @@ test('closed rectangles stay ordered and extrude exact rounded profiles', () => 
   ordered(result); assert.equal(result.at(-1).end, result[0].start); tangentJoins(result);
   const solid = sketch().add(result).extrude({ length: 2 });
   validateSweepMesh(solid.triangulate());
-  assert.equal(solid.surfaces.length, 10);
+  assert.equal(solid.surfaces.length, 3);
 });
 
 test('fully consumed segments disappear, so rounding a square at half its side creates a circle', () => {

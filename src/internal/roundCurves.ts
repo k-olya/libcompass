@@ -31,7 +31,7 @@ function solve(matrix: number[][], rhs: number[]): number[] {
   return rows.map(row => row[size]);
 }
 
-/** Intersect inward parallel surfaces, retaining their exact contact equations. */
+/** Intersect inward/outward radius offsets for convex/concave rims, retaining contact equations. */
 export function roundCurves(surfaces: readonly Surface[], selected: readonly SpatialBoundary[], radius: number, topology: RoundTopology): Surface[] {
   const replacements = new Map<Surface, Map<SpatialBoundary, Trim>>(), rounded: Surface[] = [];
   for (const boundary of selected) {
@@ -41,7 +41,7 @@ export function roundCurves(surfaces: readonly Surface[], selected: readonly Spa
       throw new RangeError('Round requires two regular adjoining planar or spatial surfaces');
     }
     const source = adjacent as ParametricFace[], placements = source.map(surface => boundaryPlacement(surface, boundary));
-    const cache = new Map<number, { uv: Point[]; points: Vertex[]; normals: vec3[]; center: vec3 }>();
+    const cache = new Map<number, { uv: Point[]; points: Vertex[]; normals: vec3[]; center: vec3; sense: number }>();
     const pair = (parameter: number) => {
       const t = parameter === 1 ? 0 : parameter, cached = cache.get(t);
       if (cached) return cached;
@@ -49,6 +49,9 @@ export function roundCurves(surfaces: readonly Surface[], selected: readonly Spa
       const initial = placements.map(placement => placement.uv(t)), initialNormals = source.map((surface, i) => surfaceFrame(surface, initial[i]).normal);
       const cosine = vec3.dot(initialNormals[0], initialNormals[1]);
       if (cosine < -1 + 1e-8 || cosine > 1 - 1e-8) throw new RangeError('Round requires a sharp regular boundary');
+      // Convex balls lie in material; concave balls lie in the adjacent void.
+      // Retained surface directions distinguish the two without curve-type equations.
+      const sense = vec3.dot(placements[0].inward(initial[0], tangent), initialNormals[1]) < 0 ? 1 : -1;
       const setback = radius * Math.sqrt((1 - cosine) / (1 + cosine));
       let uv = initial.map((point, i) => moveSurfaceUV(source[i], point, vec3.scale([0, 0, 0], unit(placements[i].inward(point, tangent)), setback)));
       // Fix the station with a contact point on the curved source. The ball's
@@ -57,16 +60,16 @@ export function roundCurves(surfaces: readonly Surface[], selected: readonly Spa
       const evaluate = (values: Point[]) => {
         const points = source.map((surface, i) => atSurface(surface, values[i]));
         const normals = source.map((surface, i) => surfaceFrame(surface, values[i]).normal);
-        const centers = points.map((point, i) => vec3.scaleAndAdd([0, 0, 0], point.position, normals[i], -radius));
+        const centers = points.map((point, i) => vec3.scaleAndAdd([0, 0, 0], point.position, normals[i], -radius * sense));
         return { points, normals, center: centers[0], residual: [...sub(centers[0], centers[1]), vec3.dot(sub(points[constrain].position, origin.position), tangent)] };
       };
       for (let iteration = 0; ; iteration++) {
         const result = evaluate(uv);
         if (Math.hypot(...result.residual) <= Math.max(1e-11, radius * 1e-10)) {
           for (let i = 0; i < 2; i++) if (vec3.dot(sub(result.points[i].position, origin.position), placements[i].inward(initial[i], tangent)) < -topology.tolerance) {
-            throw new RangeError('Round requires a convex boundary');
+            throw new RangeError('Round contacts leave the retained surfaces');
           }
-          const value = { uv, points: result.points, normals: result.normals, center: result.center };
+          const value = { uv, points: result.points, normals: result.normals, center: result.center, sense };
           cache.set(t, value); return value;
         }
         if (iteration >= 30) throw new RangeError('Round offset-surface intersection did not converge');
@@ -98,7 +101,7 @@ export function roundCurves(surfaces: readonly Surface[], selected: readonly Spa
       replacements.set(surface, entries);
     });
     const normal = (u: number, v: number) => spherical(pair(u).normals[0], pair(u).normals[1], v);
-    const patch = topology.patch((u, v) => ({ position: vec3.scaleAndAdd([0, 0, 0], pair(u).center, normal(u, v), radius) }),
+    const patch = topology.patch((u, v) => ({ position: vec3.scaleAndAdd([0, 0, 0], pair(u).center, normal(u, v), radius * pair(u).sense) }),
       { v0: rails[0], v1: rails[1] }, normal, true);
     if (patch) rounded.push(patch);
   }

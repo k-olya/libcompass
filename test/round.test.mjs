@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { vec3 } from 'gl-matrix';
-import { round, circle, rectangle, Face, node, planarCurve, setTriangulationResolution,
-  sketch, Solid, SpatialCurve, SpatialSurface, TrimmedSurface, XY, YZ, ZX } from 'libcompass';
+import { round, circle, rectangle, roundPolyline, Face, node, planarCurve, setTriangulationResolution,
+  sketch, Solid, SpatialCurve, SpatialSurface, TrimmedSurface, XY, YZ, ZX, X, Z } from 'libcompass';
 import { round as operationRound } from 'libcompass/operations/round';
 import { validateSweepMesh } from '../dist/internal/validateSweepMesh.js';
+import { surfaceFrame } from '../dist/internal/surfaceGeometry.js';
 
 setTriangulationResolution(0.0128);
 const center = { x: 0, y: 0 };
@@ -36,6 +37,71 @@ function check(solid, expectedVolume, euler = 2) {
 function checkSurface(surface, equation) {
   for (const u of [0, 0.13, 0.37, 0.71, 1]) for (const v of [0, 0.17, 0.43, 0.81, 1]) equation(surface.at(u, v).position);
 }
+
+test('rounded-rectangle blind pockets round their convex lips and concave floor together', () => {
+  const width = 100, height = 60, radius = 10, wallThickness = 5;
+  const part = sketch().add(roundPolyline({ segments: rectangle({ center, width, height }), radius })).extrude(20);
+  const face = part.surfaces.find(surface => surface.plane && vec3.equals(surface.plane.normal, Z));
+  const cutPart = part.extrudeCut({
+    sketch: sketch(face).add(roundPolyline({
+      segments: rectangle({ center, width: width - wallThickness * 2, height: height - wallThickness * 2 }),
+      radius: radius - wallThickness,
+    })), length: -10,
+  });
+  const selected = cutPart.boundaries.filter(boundary => cutPart.surfaces.some(surface =>
+    surface instanceof Face && vec3.equals(surface.plane.normal, Z) && surface.boundaries.includes(boundary)));
+  const child = node(); cutPart.add(child);
+  const cached = cutPart.triangulate(), bytes = cached.slice(), surfaces = [...cutPart.surfaces], boundaries = [...cutPart.boundaries];
+  const rounded = cutPart.round({ radius: 1, boundaries: ({ face }) => vec3.equals(face.plane.normal, Z) });
+  assert.equal(selected.length, 3);
+  assert.equal(rounded.surfaces.length, 8); assert.equal(rounded.boundaries.length, 7);
+  const sourceVolume = check(cutPart), roundedVolume = check(rounded);
+  assert.ok(roundedVolume < sourceVolume);
+  assert.deepEqual(cutPart.surfaces, surfaces); assert.deepEqual(cutPart.boundaries, boundaries);
+  assert.equal(cutPart.triangulate(), cached); assert.deepEqual(cached, bytes);
+  assert.deepEqual(rounded.children, [child]); assert.notEqual(rounded.children, cutPart.children);
+  const blends = rounded.surfaces.slice(-3);
+  for (let i = 0; i < blends.length; i++) {
+    const blend = blends[i], boundary = selected[i];
+    const adjoining = cutPart.surfaces.filter(surface => surface.boundaries.includes(boundary));
+    const cap = adjoining.find(surface => surface instanceof Face), wall = adjoining.find(surface => surface instanceof SpatialSurface);
+    const side = wall.sides.v0 === boundary ? 0 : 1, concave = cap.plane.origin[2] === 10;
+    for (const u of [0.03, 0.13, 0.37, 0.71, 0.92]) {
+      const contact = blend.at(u, 0).position;
+      const center = vec3.scaleAndAdd([0, 0, 0], contact, cap.plane.normal, concave ? 1 : -1);
+      for (const v of [0, 0.2, 0.6, 1]) close(vec3.distance(blend.at(u, v).position, center), 1);
+      for (const v of [0, 1]) {
+        const normal = surfaceFrame(blend, { x: u, y: v }).normal;
+        const sourceNormal = v === 0 ? cap.plane.normal : surfaceFrame(wall, { x: u, y: side }).normal;
+        close(vec3.dot(normal, sourceNormal), 1, 1e-6);
+      }
+    }
+  }
+  assert.throws(() => cutPart.round({ radius: 3, boundaries: ({ face }) => vec3.equals(face.plane.normal, Z) }), RangeError);
+});
+
+test('a concave pocket floor adds material and can converge to an exact spherical bowl', () => {
+  const source = sketch().add(circle(6)).extrude(10);
+  const cap = source.surfaces.find(surface => surface instanceof Face && vec3.equals(surface.plane.normal, Z));
+  const pocket = source.extrudeCut({ sketch: sketch(cap).add(circle(4)), length: -6 });
+  const bottom = pocket.surfaces.find(surface => surface instanceof Face && surface.plane.origin[2] === 4);
+  const original = check(pocket);
+  const small = pocket.round({ radius: 1, boundaries: bottom });
+  assert.ok(check(small) > original);
+  const bowl = pocket.round({ radius: 4, boundaries: bottom });
+  assert.equal(bowl.surfaces.length, 5);
+  assert.ok(check(bowl) > original);
+  checkSurface(bowl.surfaces.at(-1), ([x, y, z]) => close(x * x + y * y + (z - 8) ** 2, 16));
+});
+
+test('mixed straight/curved rims and concave rounds support rotated placement and negative extrusion', () => {
+  const plane = XY.rotate({ axis: X, angle: 31 }).displace([3, 4, 5]);
+  const source = sketch({ plane }).add(roundPolyline({ segments: rectangle({ center, width: 20, height: 12 }), radius: 2 })).extrude(-8);
+  const normal = vec3.negate([0, 0, 0], plane.normal);
+  const cap = source.surfaces.find(surface => surface instanceof Face && vec3.equals(surface.plane.normal, normal));
+  const pocket = source.extrudeCut({ sketch: sketch(cap).add(roundPolyline({ segments: rectangle({ center, width: 16, height: 8 }), radius: 1 })), length: -4 });
+  check(pocket.round({ radius: 0.3, boundaries: ({ face }) => !!face && vec3.equals(face.plane.normal, normal) }));
+});
 
 test('a cylinder rounds all the way to a mathematical sphere with no caps or cylindrical remnant', () => {
   const sphere = cylinder().round({ radius: 1 });

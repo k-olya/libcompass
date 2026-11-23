@@ -61,11 +61,12 @@
   placement and ignore infinite construction lines. Solid measurements exclude
   child nodes and do not change memo caches. Return a snapshot and log it once;
   hosts can provide the log callback for their script console.
-- During extrusion profile assembly, join connected open PlanarCurves whose
-  oriented endpoint tangents agree into exact piecewise curves. Smooth runs may
+- During extrusion profile assembly, join connected open PlanarCurves and line
+  segments whose oriented endpoint tangents agree into exact piecewise curves. Smooth runs may
   remain open or close into loops; already-closed input curves never join other
   curves, even at coincident endpoints. Keep sharp corners/cusps as physical
-  joins, preserve source sampling overrides and normalized parameter metadata,
+  joins, preserve purely straight runs and their intermediate vertices, preserve
+  source sampling overrides and normalized parameter metadata,
   and leave the source sketch unchanged. Do not add curve-type special cases.
 - Extrusion takes a finite, nonzero signed `length` and an optional finite,
   nonzero `axis` defaulting to the sketch plane normal. Normalize the axis
@@ -134,8 +135,11 @@
 - Round is a nonmutating constant-radius rolling-ball operation with the same
   original boundary-index selection and child/cache preservation as chamfer.
   Retain exact tangent surface evaluators and contact rails; curve types must not
-  introduce operation-level special cases. Closed curved rims intersect inward
-  offset surfaces, and three rounded planar edges meet in a spherical corner.
+  introduce operation-level special cases. Smooth closed rims can combine straight
+  and curved sections. Convex rounds intersect inward radius offsets and remove
+  material; concave rounds intersect outward offsets and add material, including
+  pocket floors. Determine the side from adjoining surface normals and retained
+  surface directions. Three rounded planar edges meet in a spherical corner.
   At the radius limit, remove zero-area faces/edges, share coincident rails, and
   retain singular pole vertices without emitting degenerate triangles. Preserve
   source sampling overrides. Reject unsupported corners, overlaps and unresolved

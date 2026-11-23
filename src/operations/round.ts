@@ -20,8 +20,10 @@ import { searchBoundaries, type BoundarySelector } from './searchBoundaries.js';
  * Rounds retain mathematical surfaces and shared exact contact curves. Three rounded
  * planar edges meet in a spherical corner. At the radius limit, consumed faces and
  * edges disappear: a cylinder can become a sphere, and a hollow cylinder a torus.
- * Convex planar edges and smooth closed curved rims are supported. Open curved corners,
- * nonconvex edges, two-edge corner junctions and unresolved offset intersections throw.
+ * Convex planar edges and convex/concave smooth closed rims are supported. Rims may
+ * combine tangent straight and curved sections, including pocket lips and floors.
+ * Open curved corners, nonconvex sharp planar corners, two-edge corner junctions
+ * and unresolved offset intersections throw.
  * @returns A new solid retaining the input child nodes in a fresh child array.
  * @throws {@link RangeError} for invalid radii/indices or unsupported, oversized or unresolved rounds.
  * @example

@@ -208,7 +208,10 @@ const beveled = part.chamfer({
 
 Straight edges of convex planar solids produce cylindrical blends. Three selected
 edges meeting at a regular corner produce a spherical patch. Smooth closed rims
-use numerical intersections of the adjoining surfaces' inward radius offsets;
+use numerical intersections of the adjoining surfaces' radius offsets: inward
+for convex edges and outward for concave edges such as pocket floors. Convex
+rounds remove material; concave rounds add material. Smooth rims can combine
+tangent line segments and curves, as in an extruded rounded rectangle. Their
 contact curves remain exact evaluators and respect source sampling overrides.
 No circle-specific formulas or mesh replacement solids are used. At a radius
 limit, zero-area faces and edges disappear and coincident rails are shared.
@@ -224,8 +227,9 @@ const torus = round({ solid: tube, radius: 1 });
 
 The supported inputs are convex planar solids with one or three selected edges at
 each affected three-face corner, or smooth closed rims with regular adjoining
-surface charts. Single-edge ends must meet perpendicular planar caps. Open curved
-corners, two-edge corner junctions, nonconvex edges, mixed curved/straight corner
+surface charts, including convex lips and concave floors of blind pockets.
+Single-edge ends must meet perpendicular planar caps. Open curved
+corners, two-edge corner junctions, sharp nonconvex planar corners, mixed sharp corner
 trims, overlaps, and unresolved offset intersections throw explicitly. Geometry
 is checked for shared manifold topology and a closed, consistently oriented,
 non-self-intersecting sampled mesh before the result is returned.
@@ -591,12 +595,13 @@ through inheritance. Extrusion accepts closed planar curves and assembles open
 curves and line segments into closed, unbranched profiles. Construction points and
 infinite lines do not contribute to profiles.
 
-Extrusion joins connected open `PlanarCurve`s when their endpoint coordinates
+Extrusion joins connected open `PlanarCurve`s and line segments when their endpoint coordinates
 match and their tangents agree in the profile's traversal direction. A smooth
 run becomes one exact piecewise curve, which may stay open or close into a loop.
 Each source curve occupies an equal interval of the new [0, 1] parameter;
 its equations, tangent evaluator, and sampling override are retained. Sketch
-elements stay unchanged. Straight segments and sharp joins retain their topology.
+elements stay unchanged. Purely straight runs retain their intermediate vertices;
+sharp joins retain their topology.
 Already-closed curves never join other curves; two touching circles remain
 independent loops and still fail the usual touching-profile validation.
 

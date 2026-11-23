@@ -7,6 +7,23 @@ import { validateSweepMesh } from '../dist/internal/validateSweepMesh.js';
 
 const close = (a, b, tolerance = 1e-8) => assert.ok(Math.abs(a - b) < tolerance, `${a} != ${b}`);
 const entry = (curve, reversed = false) => ({ curve, reversed, straight: false });
+
+test('tangent lines and curves join into an exact loop without extrusion seams', () => {
+  const elements = roundPolyline({ segments: rectangle({ center, width: 10, height: 6 }), radius: 1 });
+  const originals = elements.map(element => [element.start, element.end]);
+  const s = sketch().add(elements);
+  const loop = sketchProfiles(s)[0].boundaries;
+  assert.equal(loop.length, 1); assert.equal(loop[0].straight, false);
+  assert.equal(loop[0].curve.isLoop(), true);
+  const samples = loop[0].curve.sampleWithParameters();
+  for (const { t, point } of samples) {
+    close(point.x, loop[0].curve.at(t).x); close(point.y, loop[0].curve.at(t).y);
+  }
+  const part = s.extrude(3);
+  assert.equal(part.surfaces.length, 3); assert.equal(part.boundaries.length, 2);
+  assert.deepEqual(elements.map(element => [element.start, element.end]), originals);
+  validateSweepMesh(part.triangulate());
+});
 function quarters(rx, ry, reversed = []) {
   const points = [{ x: rx, y: 0 }, { x: 0, y: ry }, { x: -rx, y: 0 }, { x: 0, y: -ry }];
   return points.map((point, i) => new PlanarCurve({ at: t => {

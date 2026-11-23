@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { vec3 } from 'gl-matrix';
-import { chamfer, circle, extrude, extrudeAlongCurve, Face, lineSegment, node, planarCurve, RuledSurface,
-  setTriangulationResolution, sketch, Solid, SpatialCurve, SpatialSurface, TrimmedSurface, XY, ZX, YZ } from 'libcompass';
+import { chamfer, circle, center, extrude, extrudeAlongCurve, Face, lineSegment, node, planarCurve,
+  rectangle as rectangleSegments, roundPolyline, RuledSurface, searchBoundaries,
+  setTriangulationResolution, sketch, Solid, SpatialCurve, SpatialSurface, TrimmedSurface, X, XY, ZX, YZ, Z } from 'libcompass';
 import { chamfer as operationChamfer } from 'libcompass/operations/chamfer';
+import { surfaceFrame } from '../dist/internal/surfaceGeometry.js';
 
 setTriangulationResolution(0.001);
 const close = (actual, expected, tolerance = 1e-6) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected}`);
@@ -32,6 +34,78 @@ function check(solid, expectedVolume) {
   if (expectedVolume !== undefined) close(volume, expectedVolume, Math.max(1e-5, expectedVolume * 0.0005));
   return volume;
 }
+
+test('rounded-rectangle pocket lips and the concave floor chamfer together without modifying the input', () => {
+  const width = 100, height = 60, radius = 10, wallThickness = 5;
+  const part = sketch().add(roundPolyline({ segments: rectangleSegments({ center, width, height }), radius })).extrude(20);
+  const face = part.surfaces.find(surface => surface.plane && vec3.equals(surface.plane.normal, Z));
+  const cutPart = part.extrudeCut({
+    sketch: sketch(face).add(roundPolyline({
+      segments: rectangleSegments({ center, width: width - wallThickness * 2, height: height - wallThickness * 2 }),
+      radius: radius - wallThickness,
+    })), length: -10,
+  });
+  const child = node(); cutPart.add(child);
+  const cached = cutPart.triangulate(), bytes = cached.slice();
+  const surfaces = cutPart.surfaces, boundaries = cutPart.boundaries, vertices = cutPart.vertices;
+  const coordinates = vertices.map(vertex => [...vertex.position]);
+  const selection = ({ face }) => vec3.equals(face.plane.normal, Z);
+  const selected = searchBoundaries({ solid: cutPart, boundaries: selection });
+  const result = cutPart.chamfer({ length: 1, boundaries: selection });
+  assert.equal(selected.length, 3); assert.equal(result.surfaces.length, 8); assert.equal(result.boundaries.length, 7);
+  assert.ok(check(result) < check(cutPart));
+  const bevels = result.surfaces.slice(-3);
+  for (let i = 0; i < bevels.length; i++) {
+    const bevel = bevels[i], boundary = selected[i];
+    const cap = cutPart.surfaces.find(surface => surface instanceof Face && surface.boundaries.includes(boundary));
+    const concave = cap.plane.origin[2] === 10;
+    assert.ok(bevel instanceof RuledSurface);
+    for (const u of [0.03, 0.13, 0.37, 0.71, 0.92]) {
+      const original = boundary.at(u).position, a = bevel.start.at(u).position, b = bevel.end.at(u).position;
+      close(vec3.distance(a, original), 1); close(vec3.distance(b, original), 1);
+      close(vec3.dot(vec3.subtract([0, 0, 0], b, a), cap.plane.normal), concave ? 1 : -1);
+      close(vec3.dot(surfaceFrame(bevel, { x: u, y: 0.4 }).normal, cap.plane.normal), Math.SQRT1_2);
+    }
+  }
+  assert.equal(cutPart.surfaces, surfaces); assert.equal(cutPart.boundaries, boundaries); assert.equal(cutPart.vertices, vertices);
+  assert.deepEqual(vertices.map(vertex => [...vertex.position]), coordinates);
+  assert.equal(cutPart.triangulate(), cached); assert.deepEqual(cached, bytes);
+  assert.deepEqual(result.children, [child]); assert.notEqual(result.children, cutPart.children);
+  assert.throws(() => cutPart.chamfer({ length: 3, boundaries: selection }), RangeError);
+});
+
+test('concave circular pocket chamfers add the expected volume at nondefault angles', () => {
+  const source = sketch().add(circle(6)).extrude(10);
+  const cap = source.surfaces.find(surface => surface instanceof Face && vec3.equals(surface.plane.normal, Z));
+  const pocket = source.extrudeCut({ sketch: sketch(cap).add(circle(4)), length: -6 });
+  const bottom = pocket.surfaces.find(surface => surface instanceof Face && surface.plane.origin[2] === 4);
+  const original = check(pocket), exactVolume = Math.PI * (6 * 6 * 10 - 4 * 4 * 6), length = 1;
+  for (const angleDEG of [30, 60]) {
+    const rise = length * Math.tan(angleDEG * Math.PI / 180);
+    const result = pocket.chamfer({ length, angle: angleDEG, boundaries: bottom });
+    assert.ok(check(result, exactVolume + Math.PI * rise * (4 * length - length * length / 3)) > original);
+    const bevel = result.surfaces.at(-1);
+    for (const u of [0, 0.13, 0.37, 0.71, 1]) {
+      const a = bevel.start.at(u).position, b = bevel.end.at(u).position;
+      close(a[2], 4); close(Math.hypot(a[0], a[1]), 3);
+      close(b[2], 4 + rise); close(Math.hypot(b[0], b[1]), 4);
+    }
+  }
+  assert.throws(() => pocket.chamfer({ length: 5, boundaries: bottom }), RangeError);
+});
+
+test('mixed rims and concave pocket chamfers support rotated planes and negative extrusions', () => {
+  const plane = XY.rotate({ axis: X, angle: 31 }).displace([3, 4, 5]);
+  const source = sketch({ plane }).add(roundPolyline({ segments: rectangleSegments({ center, width: 20, height: 12 }), radius: 2 })).extrude(-8);
+  const normal = vec3.negate([0, 0, 0], plane.normal);
+  const cap = source.surfaces.find(surface => surface instanceof Face && vec3.equals(surface.plane.normal, normal));
+  const pocket = source.extrudeCut({
+    sketch: sketch(cap).add(roundPolyline({ segments: rectangleSegments({ center, width: 16, height: 8 }), radius: 1 })), length: -4,
+  });
+  for (const angleDEG of [30, 60]) check(pocket.chamfer({
+    length: 0.3, angle: angleDEG, boundaries: ({ face }) => !!face && vec3.equals(face.plane.normal, normal),
+  }));
+});
 
 test('chamfer exports an operation with defaults and leaves topology, children and cached input mesh unchanged', () => {
   assert.equal(operationChamfer, chamfer);

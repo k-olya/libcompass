@@ -129,7 +129,11 @@
   or empty lists select all; a selector or nonempty list with no matches selects none.
   Round uses the same selector types and helper. Setback and angle reference the first adjoining surface in
   solid.surfaces order. Curved trims retain the source evaluator through a
-  TrimmedSurface chart and share exact rails with the bevel. Respect source
+  TrimmedSurface chart and share exact rails with the bevel. Smooth closed rims
+  may combine tangent lines and curves. Convex chamfers
+  cut into material, while concave chamfers fill the adjacent void (e.g. a pocket
+  floor). Determine that side from retained directions and adjoining normals;
+  keep positive setback length and degree angle semantics on both sides. Respect
   sampling overrides and reject unresolved intersections, folds and unsupported
   curved corners rather than falling back to a mesh-only solid.
 - Round is a nonmutating constant-radius rolling-ball operation with the same

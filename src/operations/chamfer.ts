@@ -16,13 +16,16 @@ import { searchBoundaries, type BoundarySelector } from './searchBoundaries.js';
  * @param options.solid - Solid whose own surfaces are chamfered; child nodes are retained unchanged.
  * @param options.length - Positive setback distance on the first adjoining surface
  * in solid.surfaces order; defaults to 0.5. On curved surfaces this is a chord distance.
- * @param options.angle - Angle in degrees from that surface toward the material;
+ * @param options.angle - Angle in degrees from that surface, into material for a convex
+ * rim or into the adjoining void for a concave rim;
  * strictly between 0 and 90, default 45.
  * @param options.boundaries - Mixed original boundary indices/objects, planar
  * faces of the solid, and predicates accepted by {@link searchBoundaries}, as one selector or a list.
  * Omit or pass [] to chamfer all boundaries. Matches are unique by identity.
  * @remarks
- * Curved rims retain their evaluators and trim the adjoining surface charts.
+ * Smooth closed rims retain their evaluators and trim the adjoining surface charts,
+ * including rims combining tangent straight and curved sections. Convex bevels
+ * remove material; concave bevels add it at corners such as pocket floors.
  * Convex straight edges between planar faces use analytic clipping planes.
  * Bevels meeting at planar corners are intersected together. Open curved corners,
  * concave straight corners, overlapping trims, and unresolved surface intersections
@@ -41,7 +44,7 @@ export function chamfer(options: Solid | {
   solid: Solid;
   /** Positive setback on the first adjoining surface; defaults to 0.5. */
   length?: number;
-  /** Angle from that surface in degrees; defaults to 45. */
+  /** Angle from that surface in degrees, into material/void for convex/concave rims; defaults to 45. */
   angle?: number;
   /** One selector or a mixed list resolved by searchBoundaries; omitted or [] means all. */
   boundaries?: BoundarySelector | readonly BoundarySelector[];

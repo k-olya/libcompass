@@ -152,7 +152,8 @@ or simply `solid.chamfer()` for the defaults. `boundaries` accepts mixed selecto
 resolved by `searchBoundaries` (described below); omitting it or passing `[]`
 affects every boundary. Length is the positive setback on the first adjoining surface in
 `solid.surfaces` order (a chord distance on curved surfaces), and angle is in
-degrees from that surface toward the material, strictly between 0 and 90.
+degrees from that surface, strictly between 0 and 90: toward the material for
+convex rims and toward the adjacent void for concave rims.
 On a right-angle edge, the other setback is `length * tan(degtorad(angle))`.
 
 ```ts
@@ -163,7 +164,10 @@ scene.add(beveled); // The original part and its cached mesh are unchanged.
 Convex straight edges between planar faces use analytic cutting planes, including
 intersections where several bevels meet. Smooth closed curved rims are evaluated
 generically: the adjoining mathematical surfaces are trimmed and joined by a
-ruled bevel, including outer rims and holes on drafted extrusions. No circle
+ruled bevel, including outer rims and holes on drafted extrusions. Smooth rims
+may combine tangent line segments and curves. Convex bevels remove material;
+concave bevels add it, including around the floor of a blind pocket. A face
+selector can bevel the pocket's outer lip, inner lip and floor together. No circle
 equations or faceted replacement solids are used. Input surfaces, boundaries,
 vertices and coordinate arrays are not modified; child nodes are retained in a
 new child array. Open curved corners, nonconvex straight corners, overlaps with

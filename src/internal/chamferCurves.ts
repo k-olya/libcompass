@@ -92,11 +92,13 @@ export function chamferCurves(surfaces: readonly Surface[], selections: readonly
       const railTangent = first instanceof Face ? tangent : firstRail.tangent(t);
       let across = unit(vec3.cross([0, 0, 0], normal, railTangent));
       if (vec3.dot(across, sub(p0.position, point.position)) < 0) across = vec3.negate([0, 0, 0], across);
-      const direction = vec3.scaleAndAdd([0, 0, 0], vec3.scale([0, 0, 0], across, -Math.cos(angleRAD)), normal, -Math.sin(angleRAD));
+      // Convex bevels cut into material; concave bevels fill the adjoining void.
+      const sense = vec3.dot(a.inward(a.uv(t), tangent), surfaceFrame(second, uvB).normal) < 0 ? 1 : -1;
+      const direction = vec3.scaleAndAdd([0, 0, 0], vec3.scale([0, 0, 0], across, -Math.cos(angleRAD)), normal, -sense * Math.sin(angleRAD));
       const targetB = intersectLine(second, moveSurfaceUV(second, uvB,
         vec3.scale([0, 0, 0], inwardB, length * Math.tan(angleRAD))), p0, direction, length / Math.cos(angleRAD), tolerance);
       const p1 = atSurface(second, targetB);
-      if (vec3.dot(sub(p1.position, point.position), inwardB) <= tolerance) throw new RangeError('Chamfer requires a convex boundary and a compatible angle');
+      if (vec3.dot(sub(p1.position, point.position), inwardB) <= tolerance) throw new RangeError('Chamfer contacts leave the retained surfaces or require a different angle');
       result = { uv: [targetA, targetB], points: [p0, p1] };
       samples.set(t, result);
       return result;
@@ -132,6 +134,7 @@ export function chamferCurves(surfaces: readonly Surface[], selections: readonly
     const chart = (u: number, v: number): Point => {
       const left = trims.get('u0')?.uv(v) ?? { x: 0, y: v }, right = trims.get('u1')?.uv(v) ?? { x: 1, y: v };
       const bottom = trims.get('v0')?.uv(u) ?? { x: u, y: 0 }, top = trims.get('v1')?.uv(u) ?? { x: u, y: 1 };
+      if (right.x < left.x - 1e-8 || top.y < bottom.y - 1e-8) throw new RangeError('Chamfer length overlaps opposing surface trims');
       return { x: (1 - v) * bottom.x + v * top.x + (1 - u) * left.x + u * right.x - u,
         y: (1 - v) * bottom.y + v * top.y + (1 - u) * left.y + u * right.y - v };
     };

@@ -38,6 +38,7 @@ export { Edge, edge } from './Edge.js';
 export { Face, face } from './Face.js';
 export { Solid, solid } from './Solid.js';
 export { extrudeAlongCurve } from './operations/extrudeAlongCurve.js';
+export { extrudeRotate } from './operations/extrudeRotate.js';
 export { extrude } from './operations/extrude.js';
 export { round } from './operations/round.js';
 export { chamfer } from './operations/chamfer.js';

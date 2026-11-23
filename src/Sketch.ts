@@ -7,6 +7,8 @@ import type { PlanarCurve } from './PlanarCurve.js';
 import type { Point } from './Point.js';
 import type { SpatialCurve } from './SpatialCurve.js';
 import { extrudeAlongCurve } from './operations/extrudeAlongCurve.js';
+import { extrudeRotate } from './operations/extrudeRotate.js';
+import { SpatialLine } from './SpatialLine.js';
 import { extrude } from './operations/extrude.js';
 import { Solid } from './Solid.js';
 
@@ -81,6 +83,24 @@ export class Sketch {
     /** Smooth regular spatial path, open or smoothly closed. */
     curve: SpatialCurve;
   }): Solid { return extrudeAlongCurve({ sketch: this, curve: 'curve' in options ? options.curve : options }); }
+
+  /**
+   * Rotate filled regions about a coplanar spatial line, preserving their world-space placement.
+   * Accepts the axis directly, or an options object with an optional signed angle.
+   * @param options.axis - Coplanar rotation line, including its world-space origin.
+   * @param options.angle - Signed rotation in degrees, default 360; 0 < abs(angle) <= 360.
+   * Profiles may touch the axis: axis edges produce no wall and stationary points become poles.
+   * @throws {@link RangeError} for invalid profiles/angles, axis crossing, folds, pinches or intersections.
+   * @see {@link extrudeRotate}
+   */
+  extrudeRotate(options: SpatialLine | {
+    /** Rotation axis lying in this sketch's plane. */
+    axis: SpatialLine;
+    /** Signed rotation in degrees; defaults to a full circle (360). */
+    angle?: number;
+  }): Solid {
+    return extrudeRotate({ sketch: this, ...(options instanceof SpatialLine ? { axis: options } : options) });
+  }
 
   /**
    * Extrude all filled regions, preserving holes and disconnected components.

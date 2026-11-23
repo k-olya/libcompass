@@ -133,6 +133,42 @@ one side surface per source profile boundary and shares longitudinal boundaries
 at profile corners; sampling stations never become solid edges or faces.
 Surface tessellation refines both parameters against midpoint deviation.
 
+`extrudeRotate({ sketch, axis, angle })` (also `sketch.extrudeRotate({ axis, angle })`)
+revolves filled profiles about a coplanar `SpatialLine`. Its origin and normalized
+direction define the rotation axis. The sketch retains its actual world-space
+placement. `angle` uses signed right-hand degrees and defaults to 360; negative
+angles reverse rotation, and magnitudes must be nonzero and at most 360.
+Partial turns have planar caps; full turns omit caps and seam edges.
+
+```ts
+const ringProfile = sketch().add(circle({ center: { x: 6, y: 0 }, radius: 1 }));
+const torus = ringProfile.extrudeRotate(Y); // One exact doubly periodic surface.
+
+const diamondProfile = sketch().add(polyline({
+  points: [{ x: 6, y: 1 }, { x: 7, y: 0 }, { x: 6, y: -1 }, { x: 5, y: 0 }],
+  loop: true,
+}));
+const diamondRing = extrudeRotate({ sketch: diamondProfile, axis: Y });
+// Four conical walls sharing four circular ridge boundaries.
+```
+
+Revolutions share the sweep's exact surface/topology construction and numerical
+mesh validation. Profiles, holes and islands must all lie on one side of the
+axis, but may touch it. An edge along the axis produces no wall; stationary
+endpoints become shared poles. This allows a rectangle against the axis to
+produce a solid cylinder, a triangle to produce a cone, and a semicircle to
+produce a sphere. Partial turns share their axis edges between the two end caps.
+
+```ts
+const rim = arc({ start: { x: 0, y: 1 }, through: { x: 1, y: 0 }, end: { x: 0, y: -1 } });
+const sphere = sketch().add(rim, lineSegment({ start: rim.end, end: rim.start })).extrudeRotate(Y);
+```
+
+Axis crossing, noncoplanar axes and nonmanifold pinches (such as a circle tangent
+to the axis producing a horn torus) throw explicitly.
+Source curve evaluators and sampling overrides are retained; only tessellation
+produces facets. Supplying the axis directly to the sketch method uses a full turn.
+
 Sweeps reject detected corners, cusps, stationary intervals, local folds,
 nonmanifold meshes, and self-intersections, rather than returning partial solids.
 These are numerical checks at the library resolution, not a proof for arbitrary

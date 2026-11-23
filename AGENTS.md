@@ -20,7 +20,7 @@
   `negX`, `negY`, and `negZ` are unit `SpatialLine` instances with zero origins;
   `negX`, `negY`, and `negZ` point along the corresponding negative world axes.
   SpatialLine is a vec3-compatible direction array with a copied origin;
-  an extrusion ignores its origin.
+  a straight extrusion ignores its origin; rotational extrusion uses it.
   `center` is the shared local Point `{ x: 0, y: 0 }`; `origin` is the shared
   world-space zero vec3 `[0, 0, 0]`.
 - Keep API documentation grouped into Classes (including interfaces and types),
@@ -112,6 +112,18 @@
   never intermediate solid edges or faces. Reject detected corners, cusps,
   folds, self-intersections, nonmanifoldness, and unresolved numerical checks.
   Numerical midpoint checks cannot certify arbitrary hidden oscillations.
+- Rotational extrusion (`extrudeRotate`) preserves the sketch's world-space
+  placement and revolves it about a coplanar SpatialLine, using both the origin
+  and normalized direction. Angle uses signed degrees, defaults to 360, and has
+  magnitude in (0, 360]. Share parametric sweep construction and validation;
+  reverse wall/cap orientation when travel opposes the sketch normal. Full turns
+  are periodic without caps or seam edges; partial turns have planar caps.
+  Respect source sampling overrides and shared boundary identities. Currently
+  require all profiles on one side of the axis, allowing boundary contact.
+  Share stationary axis vertices as poles, omit collapsed trajectory boundaries
+  and zero-area axis walls, and share the unchanged axis edge between partial-turn
+  caps. Retain pole identities through evaluation and transforms. Reject crossing,
+  nonmanifold pinches, noncoplanar axes and unresolved geometry explicitly.
 - `SpatialSurface` is a general at(u, v) surface; `RuledSurface` is its linear
   rim/apex specialization. `Surface.boundaryLoops` lists physical boundaries,
   possibly none for a closed periodic surface; only `Face` has outer/holes.

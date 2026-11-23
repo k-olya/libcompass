@@ -8,7 +8,8 @@ import { validateVertex } from './Vertex.js';
  * @remarks
  * gl-matrix vec3 is an array type, not a runtime class. This Array subclass is
  * compatible with vec3 operations and extrusion axes, with an additional origin.
- * Direction is not normalized. An extrusion uses its direction and ignores origin.
+ * Direction is not normalized. Straight extrusion ignores the origin;
+ * rotational extrusion and rotation use both origin and direction.
  */
 export class SpatialLine extends Array<number> {
   /** Copied world-space origin; defaults to [0, 0, 0]. */

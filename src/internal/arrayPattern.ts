@@ -6,7 +6,7 @@ import type { ArrayTarget } from '../ArrayTarget.js';
 export function arrayPattern({ N, offset, width }: { N?: number; offset?: number; width?: number }, defaultWidth?: number): { N: number; offset: number } {
   const specified = [N, offset, width].filter(value => value !== undefined).length;
   if (specified === 1 && width === undefined && defaultWidth !== undefined) width = offset !== undefined && offset < 0 ? -defaultWidth : defaultWidth;
-  else if (specified !== 2) throw new RangeError('Specify exactly two of N, offset and width (rotation also accepts N or offset alone)');
+  else if (specified !== 2) throw new RangeError('Specify exactly two of N, offset and width (arrays with a default width also accept N or offset alone)');
   if (N !== undefined && (!Number.isSafeInteger(N) || N < 1 || N > 0xffffffff)) throw new RangeError('Array N must be a positive array-sized integer');
   if ([offset, width].some(value => value !== undefined && (!Number.isFinite(value) || value === 0))) throw new RangeError('Array offset and width must be finite and nonzero');
   if (N === undefined) {

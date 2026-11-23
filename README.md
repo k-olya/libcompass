@@ -823,8 +823,9 @@ geometry as immutable, as with other evaluator-based operations.
 
 ## Geometry arrays
 
-`displacementArray({ object, vector, N, offset, width })` and
-`rotationArray({ object, axis, N, offset, width })` return ordinary JavaScript
+`displacementArray({ object, vector, N, offset, width })`,
+`rotationArray({ object, axis, N, offset, width })`, and
+`curveArray({ object, curve, follow, N, offset, width })` return ordinary JavaScript
 arrays of fresh copies. They accept the same geometry as `displace` and `rotate`:
 planes, spatial lines/curves, edges, surfaces, and solids. Inputs remain unchanged.
 Displacement normalizes `vector` and uses model units for spacing. Rotation uses
@@ -849,6 +850,22 @@ For rotation, `N` alone or `offset` alone defaults width to a full circle:
 360 degrees, or -360 for a negative offset. `N: 8` produces copies at 0, 45,
 through 315 degrees, without repeating the starting copy at 360 degrees.
 
+For curve arrays, `N` alone or `offset` alone defaults width to the sampled path
+length. Spacing is distance along the path in model units, estimated using its
+`sample()` polyline at the current resolution; each position is evaluated on the
+original curve. The width must fit within the path length. Negative spacing
+traverses from the curve's end toward its start. The width endpoint is excluded
+on both open and closed paths.
+
+Each copy's world origin is placed on the curve. By default (`follow: false`),
+copies retain their original orientations without requiring tangents. With
+`follow: true`, local Z aligns to the travel tangent. Local X/Y follow the same
+minimal-twist frames as `extrudeAlongCurve`, including residual twist correction for loops. Geometry
+offset from the world origin retains that offset in the transported frame;
+there is no automatic centering. The default mode also accepts corners.
+With `follow: true`, smooth regular paths are supported; detected
+corners, cusps, stationary intervals and unresolved frames throw.
+
 ```ts
 const row = displacementArray({ object: part, vector: X, N: 4, offset: 10 });
 const grid = displacementArray({ object: row, vector: Y, N: 3, offset: 10 });
@@ -856,6 +873,10 @@ scene.add(grid);
 
 const ring = rotationArray({ object: part, axis: Z, N: 8 });
 scene.add(ring);
+
+const path = spatialCurveFromPlanar(circle(20));
+const alongPath = curveArray({ object: part, curve: path, N: 12 });
+scene.add(alongPath);
 ```
 
 Nested array targets are transformed recursively and flattened into one output

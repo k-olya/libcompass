@@ -92,5 +92,5 @@ export function sweepFrames(path: SpatialCurve, plane: Plane, radius: number) {
     const position = vec3.scaleAndAdd([0, 0, 0], origin, xAxis, point.x);
     return { position: vec3.scaleAndAdd(position, position, yAxis, point.y) };
   };
-  return { closed, parameters, frame, place };
+  return { closed, parameters, lengths, total, frame, place };
 }

@@ -56,6 +56,7 @@ export { displace } from './operations/displace.js';
 export type { ArrayTarget, ArrayCopy } from './ArrayTarget.js';
 export { displacementArray } from './operations/displacementArray.js';
 export { rotationArray } from './operations/rotationArray.js';
+export { curveArray } from './operations/curveArray.js';
 export { spatialCurveFromPlanar } from './operations/spatialCurveFromPlanar.js';
 export { Surface } from './Surface.js';
 export { RuledSurface, ruledSurface } from './RuledSurface.js';

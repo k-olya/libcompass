@@ -32,13 +32,21 @@
   Preserve shared vertices/boundaries, curve/surface sampling overrides, parameter
   charts, periodicity and orientation. Transform solid child geometry lazily under
   new transform nodes without changing source child nodes.
-- Displacement/rotation arrays return ordinary arrays of fresh transformed copies,
+- Displacement/rotation/curve arrays return ordinary arrays of fresh transformed copies,
   including a fresh zero-offset copy. Use width = N * offset (endpoint excluded),
   deriving a missing count by flooring width / offset with roundoff tolerance.
   Displacement uses a normalized direction; rotation uses degrees about a SpatialLine,
   defaulting to a full turn when only N or offset is given. Flatten nested targets
   recursively into the output, in repetition-major, depth-first order. SpatialLine
   is a geometry leaf despite extending Array; never flatten it into numbers.
+  Curve arrays use sampled arc length for spacing and evaluate positions on the
+  original SpatialCurve, respecting sample() overrides. With only N or offset,
+  default width to the full sampled path length; reject extents beyond the path.
+  Negative spacing traverses from end to start. Place the target's world origin
+  on the path and align local Z with the travel tangent using the same smooth,
+  minimal-twist frames and closed-loop correction as extrudeAlongCurve. The
+  follow option defaults to false; false keeps original orientations and must not
+  require tangents or smooth-path frame validation.
 
 # Geometry conventions
 

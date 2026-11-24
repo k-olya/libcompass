@@ -212,7 +212,7 @@ Validation uses a temporary mesh at the current resolution, with the same
 numerical limitations as sweep validation. A smooth solid with no physical
 boundaries, such as a torus, returns a new solid with its existing surfaces.
 
-`round({ solid, radius = 0.5, boundaries = [] })`, or `solid.round(options)`,
+`round({ solid, radius = 0.5, boundaries = [] })`, `solid.round(options)`, or `solid.round(radius)`
 returns a new solid with tangent constant-radius rounds. Boundary selectors refer
 to the original solid; omit them or pass `[]` for all boundaries. No source
 geometry, child nodes or cached triangulations are modified.
@@ -292,7 +292,9 @@ non-self-intersecting sampled mesh before the result is returned.
 
 A shared boundary can run forward on one spatial surface and backward on the
 other. Tessellation maps both sample parameters and vertex order to each surface's
-direction, preserving nonuniform curve sampling overrides. This also applies when
+direction, preserving nonuniform curve sampling overrides. Additional synchronized
+vertices are evaluated on the exact boundary at sampler-supplied parameters,
+rather than interpolated along a coarser polyline's chords. This also applies when
 opposing rounds meet at the limiting radius and their contact rails become one
 shared boundary.
 
@@ -616,9 +618,9 @@ method form applies to planes, spatial lines/curves, edges, solids and surfaces.
 
 Direct values are distinguished from options by type, class or the named wrapper
 field. Standalone `extrude` still requires `{ sketch, length, ... }`; only the
-sketch method can take a length alone. Likewise, optional-only methods such as
-`part.round({ radius: 1 })` keep their options form. Unlisted functions retain
-their existing signatures.
+sketch method can take a length alone. `part.round(1)` is shorthand for
+`part.round({ radius: 1 })`, selecting all boundaries. Other optional-only
+methods keep their options form. Unlisted functions retain their existing signatures.
 
 ## Reuse the result
 

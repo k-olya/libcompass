@@ -57,6 +57,15 @@ test('direct solid operations retain default settings and measurement logging', 
   assert.deepEqual(measure({position:[1,2,3]}).boundingBox.min,[1,2,3]);
 });
 
+test('numeric round matches options and retains validation and source caches', () => {
+  const source = box(), cache = source.triangulate();
+  sameMesh(source.round(0.2), source.round({ radius: 0.2 }));
+  for (const value of [0, -1, NaN, Infinity]) {
+    assert.throws(() => source.round(value), RangeError);
+  }
+  assert.equal(source.triangulate(), cache);
+});
+
 test('direct sketch, containment, lifting and boolean methods match their options forms', () => {
   const s = sketch().add(circle(1));
   sameMesh(s.extrude(2),s.extrude({length:2}));

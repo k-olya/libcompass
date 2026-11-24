@@ -1,7 +1,6 @@
 import { parameterizedSamples } from './curveSamples.js';
 import type { SpatialBoundary } from '../SpatialBoundary.js';
 import type { Vertex } from '../Vertex.js';
-import { vec3 } from 'gl-matrix';
 
 type Group = { members: Map<SpatialBoundary, boolean>; symmetric: boolean };
 // Leave room for roundoff from repeated direction reversals and trim reparameterization.
@@ -67,38 +66,20 @@ export class Tessellation {
     const existing = this.samples.get(boundary);
     if (existing) return existing;
     const group = this.group(boundary);
-    if ([...group.members.keys()].some(item => this.requests.has(item))) {
-      for (const item of group.members.keys()) {
-        const parameters = this.parameters(item);
-        const samples = this.source.get(item)!;
-        let i = 0;
-        const points = parameters.map(t => {
-          while (i + 1 < samples.length - 1 && samples[i + 1].t < t - parameterTolerance) i++;
-          if (Math.abs(t - samples[i].t) <= parameterTolerance) return samples[i].point;
-          if (Math.abs(t - samples[i + 1].t) <= parameterTolerance) return samples[i + 1].point;
-          const fraction = (t - samples[i].t) / (samples[i + 1].t - samples[i].t);
-          return { position: vec3.lerp([0, 0, 0], samples[i].point.position, samples[i + 1].point.position, fraction) };
-        });
-        this.samples.set(item, points);
-      }
-      return this.samples.get(boundary)!;
-    }
-    const polylines = [...group.members].map(([item, reversed]) => {
-      const points = item.sample();
-      if (points.length < 2) throw new RangeError('Boundary sampling must include both endpoints');
-      return { boundary: item, points: reversed ? [...points].reverse() : points };
-    });
-    // Pair polylines by sample order, retaining every supplied vertex. New
-    // vertices interpolate segments; consumers never reevaluate curve equations.
-    const fractions = [...new Set(polylines.flatMap(({ points }) => points.map((_, i) => i / (points.length - 1))))].sort((a, b) => a - b);
-    for (const { boundary: item, points } of polylines) {
-      const vertices = fractions.map(fraction => {
-        const index = fraction * (points.length - 1), nearest = Math.round(index);
-        if (Math.abs(index - nearest) < 1e-12) return points[nearest];
-        const start = Math.floor(index);
-        return { position: vec3.lerp([0, 0, 0], points[start].position, points[start + 1].position, index - start) };
+    for (const item of group.members.keys()) {
+      const parameters = this.parameters(item);
+      const samples = this.source.get(item)!;
+      let i = 0;
+      const points = parameters.map(t => {
+        while (i + 1 < samples.length - 1 && samples[i + 1].t < t - parameterTolerance) i++;
+        if (Math.abs(t - samples[i].t) <= parameterTolerance) return samples[i].point;
+        if (Math.abs(t - samples[i + 1].t) <= parameterTolerance) return samples[i + 1].point;
+        // sample() supplies every original station, including overrides. Extra
+        // stations come from adjoining samplers, and must lie on the curve,
+        // rather than on a chord of its earlier, coarser polyline.
+        return item.at(t);
       });
-      this.samples.set(item, group.members.get(item) ? vertices.reverse() : vertices);
+      this.samples.set(item, points);
     }
     return this.samples.get(boundary)!;
   }

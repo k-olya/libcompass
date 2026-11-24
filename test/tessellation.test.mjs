@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { center, rectangle, circle, sketch, Solid, SpatialCurve, SpatialSurface, Surface, spatialLine } from 'libcompass';
+import { center, rectangle, circle, sketch, Solid, SpatialCurve, SpatialSurface, Surface, spatialLine, XY, setTriangulationResolution, TRIANGULATION_RESOLUTION } from 'libcompass';
 import { Tessellation } from '../dist/internal/Tessellation.js';
 import { sampleSurface } from '../dist/internal/surfaceSampling.js';
 import { validateSweepMesh } from '../dist/internal/validateSweepMesh.js';
@@ -88,4 +88,41 @@ test('reflection roundoff coalesces grid stations without losing domain endpoint
   for (const invalid of [NaN, Infinity, -Number.EPSILON, 1 + Number.EPSILON]) {
     assert.throws(() => sampleSurface(plane, [invalid]), RangeError);
   }
+});
+
+test('shared subdivisions stay on exact curves and retain nonuniform sampler vertices', () => {
+  const curves = [0, 2].map(z => new SpatialCurve({ at: t => ({ position: [t, t * t, z] }) }));
+  const supplied = [[0, 0.1, 0.4, 1], [0, 0.3, 1]].map((parameters, i) => parameters.map(t => curves[i].at(t)));
+  curves.forEach((curve, i) => { curve.sample = () => supplied[i]; });
+  const context = new Tessellation();
+  context.link(curves[0], curves[1], true);
+  const check = () => curves.forEach((curve, i) => {
+    const points = context.vertices(curve), parameters = context.parameters(curve);
+    assert.equal(points.length, parameters.length);
+    points.forEach((point, j) => point.position.forEach((coordinate, axis) => close(coordinate, curve.at(parameters[j]).position[axis])));
+    for (const point of supplied[i]) assert.ok(points.includes(point), 'Original sample identity must survive synchronization');
+  });
+  check();
+  context.request(curves[0], [0.13, 0.55]);
+  check();
+});
+
+test('coarse rounded sphere and torus rims stay on their mathematical surfaces', () => {
+  const previous = TRIANGULATION_RESOLUTION;
+  try {
+    for (const resolution of [0.4096, 0.1024, 0.0128]) {
+      setTriangulationResolution(resolution);
+      const sphere = sketch({ plane: XY.displace([0, 0, -5]) }).add(circle(5)).extrude(10).round({ radius: 5 });
+      const torus = sketch({ plane: XY.displace([0, 0, -2]) }).add(circle(7), circle(3)).extrude(4).round({ radius: 2 });
+      for (const [solid, distance, radius] of [[sphere, ([x, y, z]) => Math.hypot(x, y, z), 5],
+        [torus, ([x, y, z]) => Math.hypot(Math.hypot(x, y) - 5, z), 2]]) {
+        const mesh = solid.triangulate();
+        validateSweepMesh(mesh);
+        for (let i = 0; i < mesh.length; i += 3) {
+          assert.ok(Math.abs(distance(mesh.subarray(i, i + 3)) - radius) < 2e-6,
+            `Shared rim vertex must stay on the surface at resolution ${resolution}: ${Array.from(mesh.subarray(i, i + 3))}`);
+        }
+      }
+    }
+  } finally { setTriangulationResolution(previous); }
 });

@@ -124,6 +124,7 @@ export class Solid extends Memo {
 
   /**
    * Return a new rounded solid, leaving this solid and its cached mesh unchanged.
+   * Accepts the radius directly, or an options object.
    * @param options.radius - Positive tangent-round radius; defaults to 0.5 model units.
    * @param options.boundaries - Indices, boundary objects, planar faces, or predicates
    * resolved by {@link searchBoundaries}, as one selector or a list; omitted or [] means all.
@@ -131,12 +132,12 @@ export class Solid extends Memo {
    * @throws {@link RangeError} for invalid options or unsupported/unresolved rounds.
    * @see {@link round}
    */
-  round(options: {
+  round(options: number | {
     /** Positive radius in model units; defaults to 0.5. */
     radius?: number;
     /** One selector or a mixed list resolved by searchBoundaries; omitted or [] means all. */
     boundaries?: BoundarySelector | readonly BoundarySelector[];
-  } = {}): Solid { return round({ ...options, solid: this }); }
+  } = {}): Solid { return round({ ...(typeof options === 'number' ? { radius: options } : options), solid: this }); }
 
   /**
    * Return the shared volume of this solid and the tool, leaving both unchanged.

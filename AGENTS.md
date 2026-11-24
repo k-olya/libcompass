@@ -130,7 +130,11 @@
   Refine both surface parameters and synchronize shared boundaries during
   tessellation. A shared boundary may run forward or backward on each surface:
   preserve that direction in parameter synchronization and mesh vertex order,
-  including nonuniform sample overrides. Periodic seams must share mesh
+  including nonuniform sample overrides. Retain original sample vertices and
+  evaluate additional synchronized stations on the exact boundary; never place
+  them on a coarser sampled chord or infer parameters from sample indices.
+  These stations come from adjoining samplers, not independent curvature probes.
+  Periodic seams must share mesh
   coordinates without adding edges.
 - Preserve shared vertex and edge identities in solids so topology can be reused
   for further operations. Curves remain mathematical through extrusion. Profile

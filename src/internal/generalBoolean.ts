@@ -12,6 +12,7 @@ import type { Vertex } from '../Vertex.js';
 import type { Solid } from '../Solid.js';
 import type { BooleanMesh } from './booleanMesh.js';
 import { parameterizedSamples, sampleParameter } from './curveSamples.js';
+import { curveParameter } from './curveTrimming.js';
 import { ParametricPatch, type PatchPath } from './parametricPatch.js';
 import { patchArrangement, type ArrangementArc, type ArrangementRegion } from './patchArrangement.js';
 import { surfaceIntersections } from './surfaceIntersections.js';
@@ -33,23 +34,7 @@ function intervals(arcs: readonly ArrangementArc[]): Map<SpatialBoundary, Interv
   }
   return groups;
 }
-/** Closest parameter refines sampled candidates against the original curve. */
-function curveParameter(curve: SpatialBoundary, point: ReadonlyVec3): number {
-  const samples = parameterizedSamples(curve); let best = 0, error = Infinity;
-  for (let i = 1; i < samples.length; i++) {
-    const a = samples[i - 1], b = samples[i], direction = vec3.subtract([0, 0, 0], b.point.position, a.point.position);
-    const fraction = Math.max(0, Math.min(1, vec3.dot(vec3.subtract([0, 0, 0], point, a.point.position), direction) / vec3.squaredLength(direction)));
-    const d = vec3.squaredDistance(vec3.lerp([0, 0, 0], a.point.position, b.point.position, fraction), point);
-    if (d < error) { error = d; best = a.t + (b.t - a.t) * fraction; }
-  }
-  for (let i = 0; i < 20; i++) {
-    const low = Math.max(0, best - 1e-6), high = Math.min(1, best + 1e-6);
-    const derivative = vec3.scale([0, 0, 0], vec3.subtract([0, 0, 0], curve.at(high).position, curve.at(low).position), 1 / (high - low));
-    const delta = vec3.dot(vec3.subtract([0, 0, 0], point, curve.at(best).position), derivative) / vec3.squaredLength(derivative);
-    best = Math.max(0, Math.min(1, best + delta)); if (Math.abs(delta) < 1e-12) break;
-  }
-  return best;
-}
+
 function loops(boundaries: readonly SpatialBoundary[]): SpatialBoundary[][] {
   const remaining = new Set(boundaries), result: SpatialBoundary[][] = [];
   while (remaining.size) {

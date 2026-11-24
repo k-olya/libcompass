@@ -30,16 +30,19 @@ export class RoundTopology {
   readonly tolerance: number;
   private readonly vertices = new Map<string, Vertex[]>();
   private readonly rails: SpatialBoundary[] = [];
-  constructor(radius: number) { this.tolerance = Math.max(1e-10, radius * 1e-8); }
+  constructor(radius: number, vertices: readonly Vertex[] = []) {
+    this.tolerance = Math.max(1e-10, radius * 1e-8);
+    for (const vertex of vertices) this.vertex(vertex.position, vertex);
+  }
 
-  vertex(position: ReadonlyVec3): Vertex {
+  vertex(position: ReadonlyVec3, source?: Vertex): Vertex {
     const cell = Array.from(position, value => Math.round(value / this.tolerance));
     for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) {
       const points = this.vertices.get([cell[0] + x, cell[1] + y, cell[2] + z].join(','));
       const match = points?.find(point => vec3.distance(position, point.position) <= this.tolerance);
       if (match) return match;
     }
-    const vertex = { position: [...position] as vec3 }, key = cell.join(',');
+    const vertex = source ?? { position: [...position] as vec3 }, key = cell.join(',');
     this.vertices.set(key, [...(this.vertices.get(key) ?? []), vertex]);
     return vertex;
   }
@@ -76,7 +79,7 @@ export class RoundTopology {
       if (loop.length > 1 && loop[0].end !== loop[1].start && loop[0].end !== loop[1].end) current = loop[0].end;
       for (const boundary of loop) {
         const reversed = boundary.start !== current, samples = boundary.sample();
-        points.push(...(reversed ? samples.reverse() : samples).slice(0, -1));
+        points.push(...(reversed ? [...samples].reverse() : samples).slice(0, -1));
         current = reversed ? boundary.start : boundary.end;
       }
       return Math.abs(signedArea(points.map(point => source.plane.toLocal(point))));

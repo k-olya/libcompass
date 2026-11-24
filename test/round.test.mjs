@@ -1,16 +1,24 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { vec3 } from 'gl-matrix';
-import { round, circle, rectangle, roundPolyline, Face, node, planarCurve, setTriangulationResolution,
+import { round, circle, rectangle, polyline, lineSegment, roundPolyline, Edge, Face, node, planarCurve, setTriangulationResolution,
   sketch, Solid, SpatialCurve, SpatialSurface, TrimmedSurface, XY, YZ, ZX, X, Z } from 'libcompass';
 import { round as operationRound } from 'libcompass/operations/round';
 import { validateSweepMesh } from '../dist/internal/validateSweepMesh.js';
 import { surfaceFrame } from '../dist/internal/surfaceGeometry.js';
+import { roundPlanes } from '../dist/internal/roundPlanes.js';
+import { roundCurves } from '../dist/internal/roundCurves.js';
+import { RoundTopology } from '../dist/internal/roundTopology.js';
+import { UnsupportedRoundError } from '../dist/internal/roundUnsupported.js';
+import { orientLoop } from '../dist/internal/boundaryLoops.js';
+import { containsInterior } from '../dist/internal/polygon.js';
 
 setTriangulationResolution(0.0128);
 const center = { x: 0, y: 0 };
 const cube = (plane = XY, length = 2) => sketch({ plane }).add(rectangle({ center, corner2: { x: 1, y: 1 } })).extrude({ length });
 const cylinder = (plane = XY, length = 2) => sketch({ plane }).add(circle({ center, radius: 1 })).extrude({ length });
+const plate = (plane = XY, length = 12) => sketch({ plane }).add(rectangle({ center, width: 100, height: 64 }),
+  circle({ center: { x: -28, y: 0 }, radius: 10 }), circle({ center: { x: 28, y: 0 }, radius: 10 })).extrude(length);
 const close = (a, b, tolerance = 1e-7) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
 const vertical = solid => solid.boundaries.map((boundary, i) => [boundary, i])
   .filter(([boundary]) => Math.abs(boundary.start.position[2] - boundary.end.position[2]) > 1).map(([, i]) => i);
@@ -37,6 +45,221 @@ function check(solid, expectedVolume, euler = 2) {
 function checkSurface(surface, equation) {
   for (const u of [0, 0.13, 0.37, 0.71, 1]) for (const v of [0, 0.17, 0.43, 0.81, 1]) equation(surface.at(u, v).position);
 }
+
+test('straight rounds preserve distant curved holes, and both kinds of round compose in one operation', () => {
+  const source = plate(), child = node(); source.add(child);
+  const surfaces = [...source.surfaces], boundaries = [...source.boundaries], vertices = [...source.vertices];
+  const cached = source.triangulate(), bytes = cached.slice();
+  const radius = 1, core = [98, 62, 10];
+  const boxVolume = core[0] * core[1] * core[2] + 2 * (core[0] * core[1] + core[1] * core[2] + core[2] * core[0])
+    + Math.PI * core.reduce((a, b) => a + b) + 4 * Math.PI / 3;
+  const cylindersVolume = 2 * Math.PI * 10 ** 2 * 12;
+  const outside = source.round({ radius, boundaries: ({ boundary }) => boundary instanceof Edge });
+  const holes = boundaries.filter(boundary => boundary.isLoop());
+  assert.equal(outside.surfaces.length, 28);
+  assert.ok(holes.every(boundary => outside.boundaries.includes(boundary)));
+  assert.ok(source.surfaces.filter(surface => surface instanceof SpatialSurface).every(surface => outside.surfaces.includes(surface)));
+  assert.ok(holes.every(boundary => outside.vertices.includes(boundary.start)));
+  check(outside, boxVolume - cylindersVolume, -2);
+  const together = source.round({ radius });
+  assert.equal(together.surfaces.length, 32);
+  assert.ok(holes.every(boundary => !together.boundaries.includes(boundary)));
+  const rimVolume = 4 * Math.PI * ((2 - Math.PI / 2) * 10 + 5 / 3 - Math.PI / 2);
+  check(together, boxVolume - cylindersVolume - rimVolume, -2);
+  assert.deepEqual(source.surfaces, surfaces); assert.deepEqual(source.boundaries, boundaries); assert.deepEqual(source.vertices, vertices);
+  assert.equal(source.triangulate(), cached); assert.deepEqual(cached, bytes);
+  assert.deepEqual(together.children, [child]); assert.notEqual(together.children, source.children);
+});
+
+test('a local straight round preserves untouched faces, boundaries and shared vertices by identity', () => {
+  const source = plate(), edge = source.boundaries.find(boundary => boundary instanceof Edge);
+  const touched = [edge.start, edge.end];
+  const result = source.round({ radius: 1, boundaries: edge });
+  for (const surface of source.surfaces) if (surface.vertices.every(vertex => !touched.includes(vertex))) assert.ok(result.surfaces.includes(surface));
+  for (const boundary of source.boundaries) if (!touched.includes(boundary.start) && !touched.includes(boundary.end)) {
+    assert.ok(result.boundaries.includes(boundary));
+    assert.ok(result.vertices.includes(boundary.start)); assert.ok(result.vertices.includes(boundary.end));
+  }
+  for (const vertex of result.vertices) {
+    for (const other of result.vertices) if (vec3.exactEquals(vertex.position, other.position)) assert.equal(vertex, other);
+  }
+  check(result, undefined, -2);
+});
+
+test('convex local rounds do not require remote regions to lie behind their adjoining planes', () => {
+  const source = sketch().add(polyline({ loop: true, points: [
+    { x: 0, y: 0 }, { x: 6, y: 0 }, { x: 6, y: 2 }, { x: 2, y: 2 }, { x: 2, y: 6 }, { x: 0, y: 6 },
+  ] })).extrude(4);
+  const at = (x, y) => source.boundaries.find(boundary => boundary instanceof Edge &&
+    [boundary.start, boundary.end].every(vertex => vertex.position[0] === x && vertex.position[1] === y));
+  check(source.round({ radius: 0.3, boundaries: at(2, 6) }), 80 - (1 - Math.PI / 4) * 0.3 ** 2 * 4);
+  check(source.round({ radius: 0.3, boundaries: at(2, 2) }), 80 + (1 - Math.PI / 4) * 0.3 ** 2 * 4);
+  const moved = source.rotate({ axis: X, angle: 31 }).displace([3,4,5]);
+  check(moved.round({ radius: 0.3, boundaries: source.boundaries.indexOf(at(2,2)) }), 80 + (1 - Math.PI / 4) * 0.3 ** 2 * 4);
+  assert.throws(() => source.round({ radius: 0.3 }), /mixed convex\/concave/);
+});
+
+function checkTangency(result, blend) {
+  for (const v of [0, 1]) {
+    const boundary = blend.sides[v === 0 ? 'v0' : 'v1'];
+    const retained = result.surfaces.find(surface => surface !== blend && surface.boundaries.includes(boundary));
+    for (const u of [0.13, 0.37, 0.71]) {
+      let expected;
+      if (retained instanceof Face) expected = retained.plane.normal;
+      else {
+        const side = Object.keys(retained.sides).find(side => retained.sides[side] === boundary);
+        const uv = t => side === 'v0' ? { x: t, y: 0 } : side === 'v1' ? { x: t, y: 1 } : side === 'u0' ? { x: 0, y: t } : { x: 1, y: t };
+        const position = boundary.at(u).position;
+        const t = vec3.distance(retained.at(uv(u).x, uv(u).y).position, position) < vec3.distance(retained.at(uv(1-u).x, uv(1-u).y).position, position) ? u : 1-u;
+        expected = surfaceFrame(retained, uv(t)).normal;
+      }
+      close(vec3.dot(surfaceFrame(blend, { x: u, y: v }).normal, expected), 1, 2e-5);
+    }
+  }
+}
+
+function inOriginalProfile(source, point) {
+  const cap = source.surfaces.find(surface => surface instanceof Face && Math.abs(surface.plane.normal[2]) > 0.9);
+  const loop = orientLoop(cap.outer).flatMap(({ boundary, reversed }) => {
+    const points = boundary.sample({ resolution: 1e-6 });
+    return (reversed ? [...points].reverse() : points).slice(0,-1).map(vertex => cap.plane.toLocal(vertex));
+  });
+  const offset = vec3.subtract([0,0,0], point, cap.plane.origin);
+  return containsInterior(loop, { x: vec3.dot(offset, cap.plane.xAxis), y: vec3.dot(offset, cap.plane.yAxis) });
+}
+
+test('analytic concave rounds fill rectangular holes and meet in concave spherical pocket corners', () => {
+  const source = sketch().add(rectangle({ center, width: 10, height: 10 }), rectangle({ center, width: 4, height: 4 })).extrude(4);
+  const insideVertical = solid => solid.boundaries.filter(boundary => boundary instanceof Edge && Math.abs(boundary.start.position[2]-boundary.end.position[2]) > 1 &&
+    [boundary.start, boundary.end].every(vertex => Math.abs(Math.abs(vertex.position[0])-2) < 1e-7 && Math.abs(Math.abs(vertex.position[1])-2) < 1e-7));
+  const radius = 0.3, edges = insideVertical(source);
+  const analytic = roundPlanes(source, edges, radius, new RoundTopology(radius, source.vertices));
+  const rounded = new Solid({ surfaces: analytic });
+  check(rounded, 336 + (4-Math.PI)*radius**2*4, 0);
+  rounded.surfaces.slice(-4).forEach(blend => checkTangency(rounded, blend));
+  const base = sketch().add(rectangle({ center, width: 10, height: 10 })).extrude(6);
+  const cap = base.surfaces.find(surface => surface instanceof Face && surface.plane.normal[2] > 0);
+  const pocket = base.extrudeCut({ sketch: sketch(cap).add(rectangle({ center, width: 4, height: 4 })), length: -4 });
+  const floor = pocket.surfaces.find(surface => surface instanceof Face && surface.plane.normal[2] > 0 && surface.boundaries.every(boundary => boundary.start.position[2] === 2));
+  const result = pocket.round({ radius, boundaries: [floor, ...insideVertical(pocket)] });
+  assert.ok(check(result) > check(pocket));
+  result.surfaces.slice(-4).forEach(surface => checkSurface(surface, point => {
+    const c = [Math.sign(point[0])*(2-radius), Math.sign(point[1])*(2-radius), 2+radius];
+    close(vec3.distance(point, c), radius);
+  }));
+});
+
+test('the numerical solver rounds open boundaries between two planar faces directly', () => {
+  const source = cube(), edge = source.boundaries[0], radius = 0.2;
+  const result = new Solid({ surfaces: roundCurves(source.surfaces, [edge], radius, new RoundTopology(radius, source.vertices)) });
+  close(check(result), check(source.round({ radius, boundaries: edge })), 0.002);
+  const blend = result.surfaces.at(-1);
+  assert.equal(blend.periodicU, false); assert.ok(blend.sides.u0); assert.ok(blend.sides.u1);
+  checkTangency(result, blend);
+});
+
+test('open curved rims trim both ends and share closing arcs with planar end caps', () => {
+  for (const [plane, length] of [[XY,2], [YZ,-2]]) {
+    const source = sketch({ plane }).add(lineSegment({ start: { x: 1, y: 0 }, end: { x: -1, y: 0 } }),
+      planarCurve({ at: t => ({ x: Math.cos(Math.PI*t), y: t === 1 ? 0 : Math.sin(Math.PI*t) }) })).extrude(length);
+    const selected = source.boundaries.filter(boundary => boundary instanceof SpatialCurve);
+    let sampled = 0;
+    selected.forEach(boundary => { const sample = boundary.sample.bind(boundary); boundary.sample = options => { sampled++; return sample(options); }; });
+    const cached = source.triangulate(), bytes = cached.slice();
+    const result = source.round({ radius: 0.2, boundaries: selected });
+    assert.ok(sampled > 0); assert.equal(result.surfaces.length, 6);
+    assert.ok(check(result) < check(source));
+    for (const blend of result.surfaces.slice(-2)) {
+      assert.equal(blend.periodicU, false); assert.ok(blend.sides.u0); assert.ok(blend.sides.u1);
+      checkTangency(result, blend);
+      for (const end of [blend.sides.u0, blend.sides.u1]) assert.equal(result.surfaces.filter(surface => surface.boundaries.includes(end)).length, 2);
+    }
+    const limit = source.round({ radius: 1, boundaries: selected });
+    assert.equal(limit.surfaces.length, 3);
+    check(limit, 2*Math.PI/3);
+    const c = vec3.scaleAndAdd([0,0,0], plane.origin, plane.normal, length/2);
+    limit.surfaces.filter(surface => surface instanceof SpatialSurface).forEach(surface => checkSurface(surface, point => close(vec3.distance(point,c),1)));
+    assert.throws(() => source.round({ radius: 1.1, boundaries: selected }), /folds|consumes|overlap|domain/);
+    assert.equal(source.triangulate(), cached); assert.deepEqual(cached, bytes);
+  }
+});
+
+test('numerical fallback rounds convex and concave straight edges adjoining curved surfaces', () => {
+  const convex = sketch().add(polyline({ points: [{x:0,y:2},{x:-5,y:2},{x:-5,y:-2},{x:0,y:-2}] }),
+    planarCurve({ at: t => ({ x: 8*t*(1-t), y: -2+4*t }) })).extrude(4);
+  const concave = sketch().add(polyline({ points: [{x:0,y:0},{x:8,y:0},{x:8,y:2},{x:4,y:2}] }),
+    planarCurve({ at: t => ({ x: 4-2*t, y: 2+2*t*t }) }),
+    polyline({ points: [{x:2,y:4},{x:2,y:8},{x:0,y:8},{x:0,y:0}] })).extrude(4);
+  for (const [source, x, y, sense] of [[convex,0,-2,1], [concave,2,4,-1]]) {
+    const edge = source.boundaries.find(boundary => boundary instanceof Edge && [boundary.start,boundary.end].every(vertex => vertex.position[0] === x && vertex.position[1] === y));
+    const child = node(); source.add(child); const cached = source.triangulate(), bytes = cached.slice();
+    assert.throws(() => roundPlanes(source, [edge], 0.2, new RoundTopology(0.2)), UnsupportedRoundError);
+    const result = source.round({ radius: 0.2, boundaries: edge });
+    check(result);
+    // Independent mesh errors can exceed the volume of a small fillet.
+    assert.equal(inOriginalProfile(source, result.surfaces.at(-1).at(0.5,0.5).position), sense === 1);
+    checkTangency(result, result.surfaces.at(-1));
+    assert.deepEqual(result.children, [child]); assert.notEqual(result.children, source.children);
+    assert.equal(source.triangulate(), cached); assert.deepEqual(cached, bytes);
+  }
+});
+
+test('numerical fallback trims oblique planar end caps instead of requiring perpendicular caps', () => {
+  const source = sketch().add(rectangle({ center, width: 4, height: 4 })).extrude({ length: 4, axis: [0.4,0,1] });
+  const edge = source.boundaries.find(boundary => boundary instanceof Edge && boundary.start.position[2] !== boundary.end.position[2]);
+  assert.throws(() => roundPlanes(source, [edge], 0.2, new RoundTopology(0.2)), /oblique/);
+  const result = source.round({ radius: 0.2, boundaries: edge });
+  assert.ok(check(result) < check(source)); checkTangency(result, result.surfaces.at(-1));
+});
+
+test('numerical fallback supports two curved adjoining surfaces and reversed chart directions', () => {
+  const source = sketch().add(planarCurve({ at: t => ({ x: -2+4*t, y: -4*t*(1-t) }) }),
+    planarCurve({ at: t => ({ x: 2-4*t, y: 4*t*(1-t) }) })).extrude(4);
+  const edge = source.boundaries.find(boundary => boundary instanceof Edge && boundary.start.position[0] === 2);
+  const curved = source.surfaces.find(surface => surface instanceof SpatialSurface);
+  const reversed = new SpatialSurface({ at: (u,v) => curved.at(1-u,v), reversed: !curved.reversed,
+    sides: { u0: curved.sides.u1, u1: curved.sides.u0, v0: curved.sides.v0, v1: curved.sides.v1 }, boundaryLoops: curved.boundaryLoops });
+  for (const input of [source, new Solid({ surfaces: source.surfaces.map(surface => surface === curved ? reversed : surface) })]) {
+    const result = input.round({ radius: 0.1, boundaries: edge });
+    check(result); assert.equal(inOriginalProfile(input, result.surfaces.at(-1).at(0.5,0.5).position), true);
+    checkTangency(result, result.surfaces.at(-1));
+  }
+});
+
+test('open curved walls away from a selected corner retain their exact topology', () => {
+  const source = sketch().add(polyline({ points: [
+    { x: 0, y: 2 }, { x: -5, y: 2 }, { x: -5, y: -2 }, { x: 0, y: -2 },
+  ] }), planarCurve({ at: t => ({ x: 8 * t * (1 - t), y: -2 + 4 * t }) })).extrude(4);
+  const edge = source.boundaries.find(boundary => boundary instanceof Edge &&
+    [boundary.start, boundary.end].every(vertex => vertex.position[0] === -5 && vertex.position[1] === -2));
+  const wall = source.surfaces.find(surface => surface instanceof SpatialSurface);
+  const samples = wall.boundaries.filter(boundary => boundary instanceof SpatialCurve).map(boundary => {
+    const points = boundary.sample(), saved = [...points];
+    boundary.sample = () => points;
+    return { points, saved };
+  });
+  const result = source.round({ radius: 0.3, boundaries: edge });
+  assert.ok(result.surfaces.includes(wall));
+  assert.ok(wall.boundaries.every(boundary => result.boundaries.includes(boundary)));
+  check(result, (20 + 16 / 3) * 4 - (1 - Math.PI / 4) * 0.3 ** 2 * 4);
+  samples.forEach(({ points, saved }) => assert.deepEqual(points, saved));
+});
+
+test('local rounding with preserved holes respects rotated planes and negative extrusion', () => {
+  const plane = YZ.rotate({ axis: X, angle: 27 }).displace([3, 4, 5]);
+  const source = plate(plane, -12);
+  const result = source.round({ radius: 1, boundaries: ({ boundary }) => boundary instanceof Edge });
+  assert.ok(source.surfaces.filter(surface => surface instanceof SpatialSurface).every(surface => result.surfaces.includes(surface)));
+  check(result, undefined, -2);
+});
+
+test('rounds still reject holes intersecting or touching the affected region', () => {
+  const source = sketch().add(rectangle({ center, width: 10, height: 6 }), circle({ center: { x: 3, y: 0 }, radius: 1 })).extrude(4);
+  const cached = source.triangulate(), bytes = cached.slice();
+  check(source.round({ radius: 0.4 }), undefined, 0);
+  for (const radius of [0.5, 0.6, 1]) assert.throws(() => source.round({ radius }), RangeError);
+  assert.equal(source.triangulate(), cached); assert.deepEqual(cached, bytes);
+});
 
 test('rounded-rectangle blind pockets round their convex lips and concave floor together', () => {
   const width = 100, height = 60, radius = 10, wallThickness = 5;
@@ -234,12 +457,14 @@ test('invalid options, nonmanifold input, oversized radii and unsupported corner
   for (const boundaries of [[-1], [0.5], [12], [NaN], null]) assert.throws(() => round({ solid: source, boundaries }), RangeError);
   assert.throws(() => round({ solid: {} }), TypeError);
   assert.throws(() => new Solid({ surfaces: [source.surfaces[0]] }).round(), /manifold/);
-  assert.throws(() => source.round({ radius: 1.1 }), RangeError);
+  assert.throws(() => source.round({ radius: 1.1 }), error => error instanceof RangeError && !(error instanceof UnsupportedRoundError) && /consumes/.test(error.message));
   assert.throws(() => cylinder().round({ radius: 1.1 }), RangeError);
   assert.throws(() => source.round({ boundaries: [0, 1] }), /one selected edge or all three/);
-  // A mixed straight/curved corner is outside this version's supported charts.
-  const mixed = sketch().add(circle({ center, radius: 0.2 }), rectangle({ center, corner2: { x: 1, y: 1 } })).extrude({ length: 2 });
-  assert.throws(() => mixed.round(), /convex planar solid/);
+  // A curved boundary at the selected edge's endpoint still needs curved corner trimming.
+  const mixed = sketch().add(lineSegment({ start: { x: 1, y: 0 }, end: { x: -1, y: 0 } }),
+    planarCurve({ at: t => ({ x: Math.cos(Math.PI * t), y: t === 1 ? 0 : Math.sin(Math.PI * t) }) })).extrude(2);
+  const straightRim = mixed.boundaries.find(boundary => boundary instanceof Edge && boundary.start.position[2] === 0 && boundary.end.position[2] === 0);
+  assert.throws(() => mixed.round({ radius: 0.1, boundaries: straightRim }), /curved corner trimming/);
   assert.equal(source.triangulate(), cached);
   const empty = new Solid({ surfaces: [] });
   assert.deepEqual(empty.round().surfaces, []); assert.notEqual(empty.round(), empty);

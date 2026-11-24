@@ -246,7 +246,7 @@ const beveled = part.chamfer({
 });
 ```
 
-Straight edges of convex planar solids produce cylindrical blends. Three selected
+Convex and concave straight edges between planar faces produce cylindrical blends. Three selected
 edges meeting at a regular corner produce a spherical patch. Smooth closed rims
 use numerical intersections of the adjoining surfaces' radius offsets: inward
 for convex edges and outward for concave edges such as pocket floors. Convex
@@ -265,12 +265,28 @@ const tube = sketch().add(circle({ center, radius: 3 }), circle({ center, radius
 const torus = round({ solid: tube, radius: 1 });
 ```
 
-The supported inputs are convex planar solids with one or three selected edges at
-each affected three-face corner, or smooth closed rims with regular adjoining
-surface charts, including convex lips and concave floors of blind pockets.
-Single-edge ends must meet perpendicular planar caps. Open curved
-corners, two-edge corner junctions, sharp nonconvex planar corners, mixed sharp corner
-trims, overlaps, and unresolved offset intersections throw explicitly. Geometry
+The analytic planar-edge solver requires only its affected edge/corner neighborhoods to be
+planar, with one or three selected edges at each affected three-face corner.
+Unrelated curved surfaces and distant hole boundaries are preserved by identity;
+affected planar faces are trimmed while retaining their holes. The rest of the
+solid can be nonconvex. A single call can round both the outside of a rectangular
+plate and its circular hole rims. Rounds that intersect or touch other hole trims
+still throw rather than removing or ignoring those features.
+Smooth closed rims require regular adjoining surface charts, including convex
+lips and concave floors of blind pockets.
+Unsupported analytic configurations retry a numerical surface-offset solver on
+the original solid. It supports open straight/curved boundaries between regular
+planar or spatial surfaces, with planar end caps and one selected boundary per
+endpoint. The solver trims neighboring boundaries and shares closing arcs with
+the caps. Oblique planar end caps are intersected with the blend when its source
+charts cover the required stations; straight edges between planar faces can use
+extended stations. Open rims can converge too: rounding both semicircular rims
+of a half-cylinder at its limiting radius produces a hemisphere and its flat cap.
+Convex and concave analytic three-edge corners use inward and outward offsets,
+respectively. Mixed convex/concave multi-edge junctions, two-edge corner junctions,
+curved end caps, insufficient source charts, overlaps and unresolved intersections
+still throw explicitly. Invalid radii and geometry do not trigger an unconditional
+retry. Geometry
 is checked for shared manifold topology and a closed, consistently oriented,
 non-self-intersecting sampled mesh before the result is returned.
 

@@ -4,7 +4,8 @@ import type { Vertex } from '../Vertex.js';
 import { vec3 } from 'gl-matrix';
 
 type Group = { members: Map<SpatialBoundary, boolean>; symmetric: boolean };
-const parameterTolerance = 16 * Number.EPSILON;
+// Leave room for roundoff from repeated direction reversals and trim reparameterization.
+const parameterTolerance = 256 * Number.EPSILON;
 
 /** Per-mesh shared subdivision and vertex storage; never changes analytic topology. */
 export class Tessellation {

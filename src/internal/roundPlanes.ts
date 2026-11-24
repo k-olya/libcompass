@@ -6,54 +6,68 @@ import type { SpatialBoundary } from '../SpatialBoundary.js';
 import type { Surface } from '../Surface.js';
 import type { Vertex } from '../Vertex.js';
 import { orientLoop } from './boundaryLoops.js';
+import { boundaryPlacement } from './surfaceRails.js';
+import { UnsupportedRoundError } from './roundUnsupported.js';
 import { RoundTopology, spherical, sub, type RoundRail } from './roundTopology.js';
 import { solve3 } from './surfaceGeometry.js';
 
-/** Rolling-ball blends of convex planar edges, with spherical three-edge corners. */
-export function roundPlanes(solid: Solid, selected: readonly SpatialBoundary[], radius: number, topology: RoundTopology): Surface[] {
+/** Signed rolling-ball blends of planar edges, with convex/concave spherical corners. */
+export function roundPlanes(solid: Solid, selected: readonly Edge[], radius: number, topology: RoundTopology): Surface[] {
   if (!selected.length) return [...solid.surfaces];
-  if (!solid.surfaces.every(surface => surface instanceof Face) || !solid.boundaries.every(boundary => boundary instanceof Edge)) {
-    throw new RangeError('Round at open edges currently requires a convex planar solid');
-  }
-  const faces = solid.surfaces as readonly Face[], edges = solid.boundaries as readonly Edge[];
+  const edges = solid.boundaries.filter(boundary => boundary instanceof Edge);
   const chosen = new Set(selected), tolerance = topology.tolerance;
-  const adjoining = (edge: SpatialBoundary) => faces.filter(face => face.boundaries.includes(edge));
-  for (const edge of selected) for (const face of adjoining(edge)) {
-    if (edges.some(other => [other.start, other.end].some(point => vec3.dot(sub(point.position, edge.start.position), face.plane.normal) > tolerance))) {
-      throw new RangeError('Round at a nonconvex edge requires local rolling-ball intersection trimming');
+  const adjoining = (edge: SpatialBoundary): Face[] => {
+    const surfaces = solid.surfaces.filter(surface => surface.boundaries.includes(edge));
+    if (surfaces.length !== 2 || !surfaces.every(surface => surface instanceof Face)) {
+      throw new UnsupportedRoundError('Round at an open straight edge requires two adjoining planar faces; curved corner trimming is required');
     }
+    return surfaces;
+  };
+  const senses = new Map<Edge, number>();
+  for (const edge of selected) {
+    const [a, b] = adjoining(edge);
+    const direction = vec3.normalize([0, 0, 0], sub(edge.end.position, edge.start.position));
+    const inward = boundaryPlacement(a, edge).inward(a.plane.toLocal(edge.start), direction);
+    const side = vec3.dot(inward, b.plane.normal);
+    if (Math.abs(side) < 1e-8) throw new RangeError('Round requires a sharp regular boundary');
+    senses.set(edge, side < 0 ? 1 : -1);
   }
-  const corners = new Map<Vertex, { faces: Face[]; edges: Edge[]; selected: Edge[]; center: Vertex }>();
+  const corners = new Map<Vertex, { faces: Face[]; edges: Edge[]; selected: Edge[]; center: Vertex; sense: number }>();
   for (const vertex of solid.vertices) {
-    const incident = edges.filter(edge => edge.start === vertex || edge.end === vertex), selections = incident.filter(edge => chosen.has(edge));
+    const incident = solid.boundaries.filter(edge => edge.start === vertex || edge.end === vertex), selections = incident.filter((edge): edge is Edge => edge instanceof Edge && chosen.has(edge));
     if (!selections.length) continue;
-    const surfaces = faces.filter(face => face.vertices.includes(vertex));
+    const surfaces = solid.surfaces.filter(face => face.vertices.includes(vertex));
     if (incident.length !== 3 || surfaces.length !== 3 || selections.length === 2) {
-      throw new RangeError('Round corners require one selected edge or all three edges of a regular three-face corner');
+      throw new UnsupportedRoundError('Round corners require one selected edge or all three edges of a regular three-face corner');
     }
+    if (!incident.every(edge => edge instanceof Edge) || !surfaces.every(surface => surface instanceof Face)) {
+      throw new UnsupportedRoundError('Round at a mixed straight/curved corner requires curved corner trimming');
+    }
+    const sense = senses.get(selections[0])!;
+    if (selections.some(edge => senses.get(edge) !== sense)) throw new UnsupportedRoundError('Round at mixed convex/concave junctions requires corner intersection trimming');
     const offsetFaces = new Set(selections.flatMap(adjoining));
     if (selections.length === 1) {
       const cap = surfaces.find(face => !offsetFaces.has(face))!;
       if ([...offsetFaces].some(face => Math.abs(vec3.dot(face.plane.normal, cap.plane.normal)) > 1e-8)) {
-        throw new RangeError('Round ending at an oblique face requires curved end trimming');
+        throw new UnsupportedRoundError('Round ending at an oblique face requires curved end trimming');
       }
     }
     const normals = surfaces.map(face => face.plane.normal);
     const delta = solve3([normals[0][0], normals[1][0], normals[2][0]], [normals[0][1], normals[1][1], normals[2][1]],
-      [normals[0][2], normals[1][2], normals[2][2]], surfaces.map(face => offsetFaces.has(face) ? -radius : 0) as vec3);
-    corners.set(vertex, { faces: surfaces, edges: incident, selected: selections,
+      [normals[0][2], normals[1][2], normals[2][2]], surfaces.map(face => offsetFaces.has(face) ? -radius * sense : 0) as vec3);
+    corners.set(vertex, { faces: surfaces, edges: incident, selected: selections, sense,
       center: topology.vertex(vec3.add([0, 0, 0], vertex.position, delta as vec3)) });
   }
   const rails = new Map<SpatialBoundary, Map<Face, RoundRail>>(), ends = new Map<Vertex, Map<SpatialBoundary, RoundRail>>();
   const rounded: Surface[] = [];
-  const contact = (vertex: Vertex, face: Face) => topology.vertex(vec3.scaleAndAdd([0, 0, 0], corners.get(vertex)!.center.position, face.plane.normal, radius));
+  const contact = (vertex: Vertex, face: Face) => topology.vertex(vec3.scaleAndAdd([0, 0, 0], corners.get(vertex)!.center.position, face.plane.normal, radius * corners.get(vertex)!.sense));
   for (const edge of selected) {
     const [a, b] = adjoining(edge), ca = corners.get(edge.start)!.center, cb = corners.get(edge.end)!.center;
     if (vec3.dot(sub(cb.position, ca.position), sub(edge.end.position, edge.start.position)) < -tolerance) {
       throw new RangeError('Round radius consumes an edge beyond its convergence');
     }
     const evaluate = (u: number, v: number): Vertex => ({ position: vec3.scaleAndAdd([0, 0, 0],
-      vec3.lerp([0, 0, 0], ca.position, cb.position, u), spherical(a.plane.normal, b.plane.normal, v), radius) });
+      vec3.lerp([0, 0, 0], ca.position, cb.position, u), spherical(a.plane.normal, b.plane.normal, v), radius * senses.get(edge)!) });
     const first = topology.rail(t => ({ position: vec3.lerp([0, 0, 0], contact(edge.start, a).position, contact(edge.end, a).position, t) }), undefined, true);
     const second = topology.rail(t => ({ position: vec3.lerp([0, 0, 0], contact(edge.start, b).position, contact(edge.end, b).position, t) }), undefined, true);
     rails.set(edge, new Map([[a, first], [b, second]]));
@@ -67,19 +81,28 @@ export function roundPlanes(solid: Solid, selected: readonly SpatialBoundary[], 
   }
   const endpoint = (edge: Edge, vertex: Vertex): Vertex => {
     const corner = corners.get(vertex);
-    if (!corner) return topology.vertex(vertex.position);
+    if (!corner) return vertex;
     const selectedEdge = corner.selected[0];
     const face = adjoining(edge).find(face => adjoining(selectedEdge).includes(face));
     if (!face) throw new RangeError('Round cannot resolve an unselected corner edge');
     return contact(vertex, face);
   };
-  const unselected = new Map(edges.filter(edge => !chosen.has(edge)).map(edge => [edge,
-    topology.rail(t => ({ position: vec3.lerp([0, 0, 0], endpoint(edge, edge.start).position, endpoint(edge, edge.end).position, t) }), undefined, true)]));
+  const unselected = new Map<SpatialBoundary, RoundRail>();
+  for (const edge of edges) if (!chosen.has(edge) && (corners.has(edge.start) || corners.has(edge.end))) {
+    const start = endpoint(edge, edge.start), end = endpoint(edge, edge.end);
+    unselected.set(edge, topology.rail(t => ({ position: vec3.lerp([0, 0, 0], start.position, end.position, t) }), undefined, true));
+  }
   const retained: Surface[] = [];
-  for (const face of faces) {
+  for (const face of solid.surfaces) {
+    if (!face.boundaries.some(boundary => rails.has(boundary) || unselected.has(boundary))) {
+      retained.push(face); continue;
+    }
+    if (!(face instanceof Face)) throw new RangeError('Round end trims reach a curved surface; curved corner trimming is required');
     const loops = face.boundaryLoops.map(loop => {
       const pieces = orientLoop(loop).map(({ boundary, reversed }) => {
-        const rail = rails.get(boundary)?.get(face) ?? unselected.get(boundary as Edge)!;
+        const rail = rails.get(boundary)?.get(face) ?? unselected.get(boundary);
+        if (!rail) return { boundary, start: reversed ? boundary.end : boundary.start,
+          end: reversed ? boundary.start : boundary.end, corner: reversed ? boundary.start : boundary.end };
         return { boundary: rail.boundary, start: rail.at(reversed ? 1 : 0), end: rail.at(reversed ? 0 : 1),
           corner: reversed ? boundary.start : boundary.end };
       });
@@ -108,7 +131,7 @@ export function roundPlanes(solid: Solid, selected: readonly SpatialBoundary[], 
       return ends.get(vertex)!.get(edge)!;
     };
     const pole = contact(vertex, c);
-    const patch = topology.patch((u, v) => ({ position: vec3.scaleAndAdd([0, 0, 0], corner.center.position, normal(u, v), radius) }),
+    const patch = topology.patch((u, v) => ({ position: vec3.scaleAndAdd([0, 0, 0], corner.center.position, normal(u, v), radius * corner.sense) }),
       { v0: arc(a, b), u0: arc(a, c), u1: arc(b, c), v1: { at: () => pole } }, normal);
     if (patch) rounded.push(patch);
   }

@@ -8,7 +8,8 @@ import type { Vertex } from '../Vertex.js';
 import { TRIANGULATION_RESOLUTION } from '../triangulation.js';
 import { parameterizedSamples } from './curveSamples.js';
 import { signedArea } from './polygon.js';
-import { checkedUV, surfaceFrame, type ParametricFace } from './surfaceGeometry.js';
+import { orientLoop } from './boundaryLoops.js';
+import { atSurface, checkedUV, surfaceFrame, type ParametricFace } from './surfaceGeometry.js';
 type Side = keyof SurfaceSides;
 const unit = (v: ReadonlyVec3) => {
   if (vec3.length(v) < 1e-12) throw new RangeError('Surface rail encountered a singular boundary');
@@ -39,17 +40,27 @@ export class SurfaceRail extends SpatialCurve {
 
 export function boundaryPlacement(surface: ParametricFace, boundary: SpatialBoundary) {
   if (surface instanceof Face) {
-    const hole = surface.holes.some(loop => loop.includes(boundary));
-    const area = signedArea(boundary.sample().slice(0, -1).map(point => surface.plane.toLocal(point)));
+    const loop = surface.boundaryLoops.find(loop => loop.includes(boundary));
+    if (!loop) throw new RangeError('Boundary does not belong to the face');
+    const pieces = orientLoop(loop), reversed = pieces.find(piece => piece.boundary === boundary)!.reversed;
+    const area = signedArea(pieces.flatMap(piece => {
+      const points = piece.boundary.sample();
+      return (piece.reversed ? [...points].reverse() : points).slice(0, -1).map(point => surface.plane.toLocal(point));
+    }));
+    const sign = Math.sign(area) * (surface.holes.includes(loop) ? -1 : 1) * (reversed ? -1 : 1);
     return { uv: (t: number) => surface.plane.toLocal(boundary.at(t)),
       inward: (_uv: Point, tangent: ReadonlyVec3) => vec3.scale([0, 0, 0],
-        vec3.cross([0, 0, 0], surface.plane.normal, tangent), Math.sign(area) * (hole ? -1 : 1)), side: undefined };
+        vec3.cross([0, 0, 0], surface.plane.normal, tangent), sign), side: undefined, reversed: false };
   }
   const side = (Object.keys(surface.sides) as Side[]).find(key => surface.sides[key] === boundary);
   if (!side) throw new RangeError('Surface trimming requires the curved boundary to have a surface parameter side');
-  const uv = (t: number): Point => side === 'v0' ? { x: t, y: 0 } : side === 'v1' ? { x: t, y: 1 }
+  const nativeUV = (t: number): Point => side === 'v0' ? { x: t, y: 0 } : side === 'v1' ? { x: t, y: 1 }
     : side === 'u0' ? { x: 0, y: t } : { x: 1, y: t };
-  return { uv, side, inward: (at: Point, tangent: ReadonlyVec3) => {
+  const probes = boundary.isLoop() ? [0.25, 0.75] : [0, 1];
+  const error = (reverse: boolean) => probes.reduce((sum, t) => sum + vec3.squaredDistance(
+    boundary.at(t).position, atSurface(surface, nativeUV(reverse ? 1 - t : t)).position), 0);
+  const reversed = error(true) < error(false), uv = (t: number) => nativeUV(reversed ? 1 - t : t);
+  return { uv, side, reversed, inward: (at: Point, tangent: ReadonlyVec3) => {
     const frame = surfaceFrame(surface, at);
     const derivative = side[0] === 'v' ? frame.dv : frame.du;
     const direction = vec3.scale([0, 0, 0], derivative, side[1] === '0' ? 1 : -1);

@@ -14,6 +14,12 @@ export function surfaceFrame(surface: ParametricFace, uv: Point) {
   if (surface instanceof Face) return { du: surface.plane.xAxis, dv: surface.plane.yAxis, normal: surface.plane.normal };
   const derivative = (axis: 'x' | 'y') => {
     const periodic = axis === 'x' ? surface.periodicU : surface.periodicV;
+    if (!periodic && (uv[axis] < 1e-5 || uv[axis] > 1 - 1e-5)) {
+      const sign = uv[axis] < 0.5 ? 1 : -1, h = 1e-5;
+      const a = atSurface(surface, uv).position, b = atSurface(surface, { ...uv, [axis]: uv[axis] + sign * h }).position;
+      const c = atSurface(surface, { ...uv, [axis]: uv[axis] + sign * 2 * h }).position;
+      return [0, 1, 2].map(i => sign * (4 * (b[i] - a[i]) - (c[i] - a[i])) / (2 * h)) as vec3;
+    }
     const a = periodic ? uv[axis] - 1e-5 : Math.max(0, uv[axis] - 1e-5);
     const b = periodic ? uv[axis] + 1e-5 : Math.min(1, uv[axis] + 1e-5);
     if (a === b) throw new RangeError('Cannot resolve surface derivatives');

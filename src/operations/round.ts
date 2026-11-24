@@ -6,6 +6,7 @@ import { roundPlanes } from '../internal/roundPlanes.js';
 import { RoundTopology } from '../internal/roundTopology.js';
 import { validateSweepMesh } from '../internal/validateSweepMesh.js';
 import { searchBoundaries, type BoundarySelector } from './searchBoundaries.js';
+import { UnsupportedRoundError } from '../internal/roundUnsupported.js';
 
 /**
  * Return a new solid with constant-radius tangent rounds on selected boundaries.
@@ -20,10 +21,17 @@ import { searchBoundaries, type BoundarySelector } from './searchBoundaries.js';
  * Rounds retain mathematical surfaces and shared exact contact curves. Three rounded
  * planar edges meet in a spherical corner. At the radius limit, consumed faces and
  * edges disappear: a cylinder can become a sphere, and a hollow cylinder a torus.
- * Convex planar edges and convex/concave smooth closed rims are supported. Rims may
- * combine tangent straight and curved sections, including pocket lips and floors.
- * Open curved corners, nonconvex sharp planar corners, two-edge corner junctions
- * and unresolved offset intersections throw.
+ * Convex and concave edges between planar faces and smooth curved rims are supported.
+ * Planar-edge rounds preserve unrelated curved surfaces and distant hole trims;
+ * both kinds of round can be selected together on the same solid. Only the affected
+ * edge/corner neighborhood must be planar. Interference with other trims throws.
+ * Rims may combine tangent straight and curved sections, including pocket lips and floors.
+ * Unsupported analytic configurations retry the numerical surface-offset solver,
+ * including open boundaries between planar/curved surfaces with planar end caps.
+ * Oblique planar ends are intersected with the blend when source charts permit it.
+ * Mixed convex/concave multi-edge junctions, two-edge corner junctions, curved end
+ * caps and unresolved offset intersections still throw. Invalid geometry never
+ * triggers an unconditional fallback.
  * @returns A new solid retaining the input child nodes in a fresh child array.
  * @throws {@link RangeError} for invalid radii/indices or unsupported, oversized or unresolved rounds.
  * @example
@@ -48,8 +56,21 @@ export function round(options: Solid | {
     throw new RangeError('Round requires a closed manifold solid with two surfaces per boundary');
   }
   if (!selected.length) return new Solid({ surfaces: solid.surfaces }).add(solid.children);
-  const topology = new RoundTopology(radius), straight = selected.filter(boundary => boundary instanceof Edge);
-  const surfaces = roundCurves(roundPlanes(solid, straight, radius, topology), selected.filter(boundary => !(boundary instanceof Edge)), radius, topology);
+  let topology = new RoundTopology(radius, solid.vertices);
+  const straight = selected.filter(boundary => boundary instanceof Edge);
+  let surfaces: Surface[];
+  try {
+    surfaces = roundCurves(roundPlanes(solid, straight, radius, topology), selected.filter(boundary => !(boundary instanceof Edge)), radius, topology);
+  } catch (error) {
+    if (!(error instanceof UnsupportedRoundError)) throw error;
+    // Retry source topology, never the partially constructed analytic result.
+    topology = new RoundTopology(radius, solid.vertices);
+    try { surfaces = roundCurves(solid.surfaces, selected, radius, topology); }
+    catch (fallbackError) {
+      if (fallbackError instanceof UnsupportedRoundError) throw new UnsupportedRoundError(`${error.message}. ${fallbackError.message}`, { cause: fallbackError });
+      throw fallbackError;
+    }
+  }
   const result = new Solid({ surfaces });
   for (const boundary of result.boundaries) if (surfaces.filter(surface => surface.boundaries.includes(boundary)).length !== 2) {
     throw new RangeError('Round contact trims could not be sewn into shared manifold topology');

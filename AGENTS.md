@@ -166,7 +166,22 @@
   surface directions. Three rounded planar edges meet in a spherical corner.
   At the radius limit, remove zero-area faces/edges, share coincident rails, and
   retain singular pole vertices without emitting degenerate triangles. Preserve
-  source sampling overrides. Reject unsupported corners, overlaps and unresolved
+  source sampling overrides. Planar-edge rounding is local: require planar adjoining
+  faces and supported corners only in the affected neighborhood, and classify
+  convexity from the local retained side rather than whole-solid halfspaces.
+  Preserve unrelated curved surfaces, distant hole trims and unchanged topology
+  by identity while trimming affected faces. Preserve original curved boundary
+  identities through the planar stage so straight edges and smooth rims can round
+  together in one operation. Reject interference with other trims rather than
+  deleting features. Analytic straight rounds use signed inward/outward offsets
+  for convex/concave edges and same-sense three-edge spherical corners. Numerical
+  rounds accept closed rims and open straight/curved boundaries between regular
+  planar/spatial surfaces. Open ends share closing arcs with planar caps and trim
+  their neighboring boundaries; intersect oblique caps where source charts permit.
+  Retry only explicit UnsupportedRoundError capability gaps, from original geometry
+  with fresh topology; never mask invalid radii, collisions or unresolved geometry.
+  Preserve native directions and sampler parameters through source-chart trims.
+  Reject unsupported corners, overlaps and unresolved
   intersections explicitly rather than substituting faceted geometry.
 - Geometric trims take cutting geometry, not parameter ranges: `trimCurve`
   retains the interval containing an original normalized `keep` parameter;

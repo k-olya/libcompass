@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { center, rectangle, circle, sketch, Solid, SpatialCurve, SpatialSurface, Surface, spatialLine, XY, setTriangulationResolution, TRIANGULATION_RESOLUTION } from 'libcompass';
+import { center, rectangle, circle, sketch, Solid, SpatialCurve, SpatialSurface, Surface, SurfaceRegion, spatialLine, XY, setTriangulationResolution, TRIANGULATION_RESOLUTION } from 'libcompass';
 import { Tessellation } from '../dist/internal/Tessellation.js';
 import { sampleSurface } from '../dist/internal/surfaceSampling.js';
 import { validateSweepMesh } from '../dist/internal/validateSweepMesh.js';
@@ -10,6 +10,29 @@ const key = point => Array.from(point.position, Math.fround).join(',');
 function meshVertices(mesh) {
   return new Set(Array.from({ length: mesh.length / 3 }, (_, i) => Array.from(mesh.subarray(3 * i, 3 * i + 3)).join(',')));
 }
+
+test('trimmed tessellation measures geometry rather than nonlinear parameter spacing', () => {
+  const source = new SpatialSurface({ at: (u, v) => ({ position: [10 * (u + u * u) / 2, 5 * v, 0] }) });
+  const corners = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([u, v]) => source.at(u, v));
+  const charts = [t => ({ x: t, y: 0 }), t => ({ x: 1, y: t }), t => ({ x: 1 - t, y: 1 }), t => ({ x: 0, y: 1 - t })];
+  const boundaries = charts.map((at, i) => new SpatialCurve({ at: t => {
+    const uv = at(t); return source.at(uv.x, uv.y);
+  }, start: corners[i], end: corners[(i + 1) % 4] }));
+  let calls = 0;
+  for (const boundary of boundaries) boundary.sample = () => { calls++; return [boundary.at(0), boundary.at(1)]; };
+  const region = new SurfaceRegion({ surface: source, boundaryLoops: [boundaries],
+    regions: [{ outer: boundaries.map((boundary, i) => ({ boundary, at: charts[i] })) }] });
+  const mesh = region.triangulate();
+  assert.equal(mesh.length, 18, 'A flat rectangular patch only needs two triangles');
+  assert.ok(calls > 0, 'Boundary sampling overrides remain authoritative');
+  assert.deepEqual(meshVertices(mesh), new Set(corners.map(key)));
+  let area = 0;
+  for (let i = 0; i < mesh.length; i += 9) {
+    assert.equal(mesh[i + 2], 0); assert.equal(mesh[i + 5], 0); assert.equal(mesh[i + 8], 0);
+    area += ((mesh[i + 3] - mesh[i]) * (mesh[i + 7] - mesh[i + 1]) - (mesh[i + 4] - mesh[i + 1]) * (mesh[i + 6] - mesh[i])) / 2;
+  }
+  close(area, 50);
+});
 
 test('all four parameter sides preserve opposite directions and nonuniform source samples', () => {
   const source = sketch().add(rectangle({ center, corner2: { x: 1, y: 1 } })).extrude({ length: 2 });

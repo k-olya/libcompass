@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { vec3 } from 'gl-matrix';
-import { circle, rectangle, extrude, extrudeCut, lineSegment, plane, sketch, solid, spatialSurface,
-  SurfaceRegion, ZX, setTriangulationResolution } from 'libcompass';
+import { center, circle, rectangle, roundPolyline, extrude, extrudeCut, lineSegment, plane, sketch, solid, spatialSurface,
+  SurfaceRegion, X, ZX, setTriangulationResolution } from 'libcompass';
 import { validateSweepMesh } from '../dist/internal/validateSweepMesh.js';
 import { BooleanMesh } from '../dist/internal/booleanMesh.js';
 
@@ -26,6 +26,41 @@ const box = (min, max) => {
 const torus = () => solid({ surfaces: [spatialSurface({ periodicU: true, periodicV: true,
   at: (u, v) => ({ position: [(3 + Math.cos(2 * Math.PI * v)) * Math.cos(2 * Math.PI * u),
     (3 + Math.cos(2 * Math.PI * v)) * Math.sin(2 * Math.PI * u), Math.sin(2 * Math.PI * v)] }) })] });
+
+test('a rounded pencil box supports a blind pocket followed by an oblique top cut', () => {
+  try {
+    for (const [resolution, unitSize, wallThickness] of [[0.0128, 80, 3], [0.001, 20, 0.75]]) {
+      setTriangulationResolution(resolution);
+      const height = unitSize, width = unitSize * 2, tolerance = 0.5;
+      const body = sketch().add(roundPolyline({ segments: rectangle({ center, width: unitSize - tolerance, height: unitSize - tolerance }), radius: wallThickness * 4 })).extrude(height * 2);
+      const pocketSketch = sketch(body.surfaces.find(surface => surface.plane && vec3.equals(surface.plane.normal, [0, 0, 1])))
+        .add(roundPolyline({ segments: rectangle({ center, width: unitSize - tolerance - wallThickness * 2, height: unitSize - tolerance - wallThickness * 2 }), radius: wallThickness * 3 }));
+      const cutterSketch = sketch().add(rectangle({ center, width, height: width }));
+      const tool = cutterSketch.extrude({ sketch: cutterSketch, length: height }).rotate({ axis: X, angle: 30 }).displace([0, 0, height * 1.5]);
+      const pocket = body.extrudeCut({ sketch: pocketSketch, length: wallThickness - height });
+      const cached = pocket.triangulate(), bytes = cached.slice(), children = [...pocket.children];
+      const result = pocket.difference({ tool }), mesh = new BooleanMesh(result.triangulate());
+      const roundedArea = (width, radius) => width * width - (4 - Math.PI) * radius * radius;
+      const expected = roundedArea(unitSize - tolerance, wallThickness * 4) * height * 1.5
+        - roundedArea(unitSize - tolerance - wallThickness * 2, wallThickness * 3) * (height * 0.5 - wallThickness);
+      close(volume(result), expected, expected * 0.001);
+      const wallCenter = (unitSize - tolerance - wallThickness) / 2;
+      for (const [point, inside] of [
+        [[0, 0, height * 0.5], true], [[0, 0, height * 1.25], false], [[wallCenter, 0, height * 1.375], true],
+        [[wallCenter, 0, height * 1.625], false], [[0, wallCenter, height * 1.625], true], [[0, -wallCenter, height * 1.375], false],
+      ]) assert.equal(mesh.contains(point), inside, `Unexpected pencil-box occupancy at ${point}`);
+      const sourceWalls = pocket.surfaces.filter(surface => !surface.plane);
+      const retained = result.surfaces.filter(surface => surface instanceof SurfaceRegion);
+      assert.ok(retained.length >= 2);
+      for (const surface of retained) {
+        assert.ok(sourceWalls.includes(surface.surface), 'Rounded walls must retain their mathematical source');
+        assert.deepEqual(surface.at(0.37, 0.43).position, surface.surface.at(0.37, 0.43).position);
+      }
+      assert.equal(pocket.triangulate(), cached); assert.deepEqual(cached, bytes);
+      assert.deepEqual(pocket.children, children);
+    }
+  } finally { setTriangulationResolution(0.025); }
+});
 
 test('curved/curved booleans retain source equations, shared cuts and input caches', () => {
   const a = cylinder(), b = cylinder(2), cached = a.triangulate(), bytes = cached.slice();

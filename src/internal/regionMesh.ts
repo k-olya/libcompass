@@ -1,4 +1,4 @@
-import { vec3 } from 'gl-matrix';
+import { vec3, type ReadonlyVec3 } from 'gl-matrix';
 import type { Point } from '../Point.js';
 import type { SurfaceRegion, SurfaceTrim } from '../SurfaceRegion.js';
 import type { Vertex } from '../Vertex.js';
@@ -7,6 +7,12 @@ import { triangulatePolygon } from './polygon.js';
 import type { Tessellation } from './Tessellation.js';
 import { legalizeTriangles } from './legalizeTriangles.js';
 import { surfaceFrame } from './surfaceGeometry.js';
+
+function chordDistance(point: ReadonlyVec3, start: ReadonlyVec3, end: ReadonlyVec3): number {
+  const direction = vec3.subtract([0, 0, 0], end, start), lengthSquared = vec3.squaredLength(direction);
+  const t = lengthSquared ? Math.max(0, Math.min(1, vec3.dot(vec3.subtract([0, 0, 0], point, start), direction) / lengthSquared)) : 0;
+  return vec3.distance(point, vec3.scaleAndAdd([0, 0, 0], start, direction, t));
+}
 
 /** Conforming adaptive tessellation of retained UV polygons; no topological facets. */
 export function regionMesh(region: SurfaceRegion, context: Tessellation): Float32Array {
@@ -79,15 +85,21 @@ export function regionMesh(region: SurfaceRegion, context: Tessellation): Float3
       };
       for (let i = 0; i < triangles.length; i += 3) {
         const ids = triangles.slice(i, i + 3);
+        const [a, b, c] = ids.map(id => points[id].point.position);
+        const normal = vec3.cross([0, 0, 0], vec3.subtract([0, 0, 0], b, a), vec3.subtract([0, 0, 0], c, a)), area = vec3.length(normal);
+        // Refine normal deviation, not tangential drift caused by a nonlinear
+        // chart. Fixed boundary samples cannot resolve that parameter drift.
+        const deviation = (point: ReadonlyVec3) => area ? Math.abs(vec3.dot(vec3.subtract([0, 0, 0], point, a), normal)) / area
+          : Math.min(chordDistance(point, a, b), chordDistance(point, b, c), chordDistance(point, c, a));
         for (let j = 0; j < 3; j++) {
           const a = ids[j], b = ids[(j + 1) % 3];
           if (boundary.has(key(a, b))) continue;
           const uv = { x: (points[a].uv.x + points[b].uv.x) / 2, y: (points[a].uv.y + points[b].uv.y) / 2 };
-          if (vec3.distance(evaluated(uv).position, vec3.lerp([0, 0, 0], points[a].point.position, points[b].point.position, 0.5)) > TRIANGULATION_RESOLUTION) middle(a, b);
+          if (deviation(evaluated(uv).position) > TRIANGULATION_RESOLUTION) middle(a, b);
         }
         const uv = { x: ids.reduce((sum, id) => sum + points[id].uv.x, 0) / 3, y: ids.reduce((sum, id) => sum + points[id].uv.y, 0) / 3 };
-        const center = evaluated(uv), average = vec3.scale([0, 0, 0], ids.reduce((sum, id) => vec3.add(sum, sum, points[id].point.position), [0, 0, 0] as vec3), 1 / 3);
-        if (vec3.distance(center.position, average) > TRIANGULATION_RESOLUTION) {
+        const center = evaluated(uv);
+        if (deviation(center.position) > TRIANGULATION_RESOLUTION) {
           const index = points.length; points.push({ uv, point: center }); centers.set(i, index);
         }
       }

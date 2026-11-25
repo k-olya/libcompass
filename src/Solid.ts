@@ -15,9 +15,6 @@ import type { Vertex } from './Vertex.js';
 import { rigidCopies } from './internal/rigidContext.js';
 import { TransformMat4 } from './TransformMat4.js';
 import type { BoundarySelector } from './operations/searchBoundaries.js';
-import { annotate } from './operations/annotate.js';
-import type { AnnotatedNode } from './AnnotatedNode.js';
-import type { AnnotationColor } from './defaults/colors.js';
 
 /**
  * A memoized scene node retaining exact planar and spatial surfaces.
@@ -56,23 +53,6 @@ export class Solid extends Memo {
     this.boundaries = [...new Set(surfaces.flatMap(surface => surface.boundaries))];
     this.vertices = [...new Set(surfaces.flatMap(surface => surface.vertices))];
   }
-
-  /**
-   * Wrap this solid in a new memoized group with preview annotations.
-   * @param options.name - Preview mesh name; omitted names use a hidden mesh1, mesh2, ... counter.
-   * @param options.color - Palette name or #RGB/#RRGGBB string; defaults to 'default'.
-   * @param options.alpha - Opacity in [0, 1]; defaults to 1.
-   * @returns An AnnotatedNode retaining this solid unchanged as its child.
-   * @see {@link annotate}
-   */
-  annotate(options: {
-    /** Preview mesh name; omitted names use the hidden mesh1, mesh2, ... counter. */
-    name?: string;
-    /** Palette name or #RGB/#RRGGBB string; defaults to 'default'. */
-    color?: AnnotationColor;
-    /** Opacity in [0, 1]; defaults to 1. */
-    alpha?: number;
-  } = {}): AnnotatedNode { return annotate({ ...options, solid: this }); }
 
   /**
    * Return a new rotated solid; leave this object unchanged.

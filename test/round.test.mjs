@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { vec3 } from 'gl-matrix';
 import { round, circle, rectangle, polyline, lineSegment, roundPolyline, Edge, Face, node, planarCurve, setTriangulationResolution,
-  sketch, Solid, SpatialCurve, SpatialSurface, TrimmedSurface, XY, YZ, ZX, X, Z } from 'libcompass';
+  sketch, Solid, SpatialCurve, SpatialSurface, SurfaceRegion, TrimmedSurface, XY, YZ, ZX, X, Z } from 'libcompass';
 import { round as operationRound } from 'libcompass/operations/round';
 import { validateSweepMesh } from '../dist/internal/validateSweepMesh.js';
 import { surfaceFrame } from '../dist/internal/surfaceGeometry.js';
@@ -483,4 +483,24 @@ test('opposite edge rounds keep reversed shared rails watertight at the exact li
     }
     assert.equal(source.triangulate(), cached); assert.deepEqual(cached, bytes);
   }
+});
+
+
+test('opposing rounds share partial contact intervals and split the remaining planar cap', () => {
+  const source = sketch().add(
+    roundPolyline({ segments: rectangle({ center, width: 20, height: 12 }), radius: 3 }),
+    roundPolyline({ segments: rectangle({ center, width: 14, height: 8 }), radius: 1 }),
+  ).extrude(5);
+  const cached = source.triangulate(), bytes = cached.slice();
+  const rounded = source.round({ radius: 1, boundaries: ({ face }) => face?.plane.normal[2] === 1 });
+  const roundedVolume = check(rounded, undefined, 0);
+  assert.ok(roundedVolume < check(source, undefined, 0));
+  const moved = rounded.rotate({ axis: X, angle: 17 }).displace([1, 2, 3]);
+  close(check(moved, undefined, 0), roundedVolume, roundedVolume * 1e-6);
+  assert.equal(rounded.surfaces.filter(surface => surface instanceof Face && surface.plane.normal[2] === 1).length, 2);
+  const blends = rounded.surfaces.slice(-2);
+  assert.ok(blends.every(surface => surface instanceof SurfaceRegion));
+  assert.ok(blends[0].boundaries.some(boundary => blends[1].boundaries.includes(boundary)));
+  assert.throws(() => source.round({ radius: 1.01, boundaries: ({ face }) => face?.plane.normal[2] === 1 }), RangeError);
+  assert.equal(source.triangulate(), cached); assert.deepEqual(cached, bytes);
 });

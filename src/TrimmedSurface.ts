@@ -2,6 +2,7 @@ import type { Point } from './Point.js';
 import { SpatialSurface, type SurfaceSides } from './SpatialSurface.js';
 import type { SpatialBoundary } from './SpatialBoundary.js';
 import type { RigidContext } from './internal/rigidContext.js';
+import { vec3 } from 'gl-matrix';
 
 /**
  * A mathematical trim of a spatial surface, retaining its original evaluator.
@@ -43,6 +44,18 @@ export class TrimmedSurface extends SpatialSurface {
   parameters(u: number, v: number): Point {
     if (![u, v].every(t => Number.isFinite(t) && t >= 0 && t <= 1)) throw new RangeError('Trim parameters must be in [0, 1]');
     return this.chart(u, v);
+  }
+
+  /** Apply the chart's chain rule without differencing world-space surface normals. */
+  override derivatives(u: number, v: number): { du: vec3; dv: vec3 } {
+    const uv = this.chart(u, v), source = this.surface.derivatives(uv.x, uv.y);
+    const derivative = (axis: number) => {
+      const t = axis ? v : u, low = Math.max(0, t - 1e-5), high = Math.min(1, t + 1e-5);
+      const a = axis ? this.chart(u, low) : this.chart(low, v), b = axis ? this.chart(u, high) : this.chart(high, v);
+      return vec3.scaleAndAdd([0, 0, 0], vec3.scale([0, 0, 0], source.du, (b.x - a.x) / (high - low)),
+        source.dv, (b.y - a.y) / (high - low));
+    };
+    return { du: derivative(0), dv: derivative(1) };
   }
 
   protected override copyTransformed(context: RigidContext): TrimmedSurface {

@@ -149,3 +149,25 @@ test('coarse rounded sphere and torus rims stay on their mathematical surfaces',
     }
   } finally { setTriangulationResolution(previous); }
 });
+
+test('mesh validation separates acute triangle corners by Euclidean distance', () => {
+  const positions = [], quad = (a, b, c, d) => positions.push(...a, ...b, ...c, ...a, ...c, ...d);
+  const xs = [0, 0.00001, 1, 2], y = 0.02, z = 100;
+  for (let i = 1; i < xs.length; i++) {
+    const a = xs[i - 1], b = xs[i];
+    quad([a, 0, 0], [a, y, 0], [b, y, 0], [b, 0, 0]);
+    quad([a, 0, z], [b, 0, z], [b, y, z], [a, y, z]);
+    quad([a, 0, 0], [b, 0, 0], [b, 0, z], [a, 0, z]);
+    quad([a, y, 0], [a, y, z], [b, y, z], [b, y, 0]);
+  }
+  quad([0, 0, 0], [0, 0, z], [0, y, z], [0, y, 0]);
+  quad([2, 0, 0], [2, y, 0], [2, y, z], [2, 0, z]);
+  const mesh = new Float32Array(positions);
+  assert.doesNotThrow(() => validateSweepMesh(mesh));
+  const separated = [...positions, ...positions.map((value, i) => i % 3 === 0 ? value + 2.0000005 : value)];
+  assert.doesNotThrow(() => validateSweepMesh(new Float32Array(separated)));
+  const touching = [...positions, ...positions.map((value, i) => i % 3 === 0 ? value + 2 : value)];
+  assert.throws(() => validateSweepMesh(new Float32Array(touching)), /self-intersects|manifold/);
+  const overlap = [...positions, ...positions.map((value, i) => i % 3 === 0 ? value + 1 : value)];
+  assert.throws(() => validateSweepMesh(new Float32Array(overlap)), /self-intersects|manifold/);
+});

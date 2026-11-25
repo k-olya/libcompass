@@ -2,6 +2,24 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { triangulatePolygon } from '../dist/internal/polygon.js';
 
+test('restoring straight boundary stations repairs tiny ears without dropping vertices', () => {
+  const points = [[0, 3e-13], [0.005, 0], [0.017, 0], [0.12, 0], [0, 1]].map(([x, y]) => ({ x, y }));
+  for (const loop of [points, [...points].reverse()]) {
+    const triangles = triangulatePolygon([loop], 1e-14), edges = new Map();
+    assert.equal(triangles.length / 3, loop.length - 2);
+    assert.equal(new Set(triangles).size, loop.length);
+    for (let i = 0; i < triangles.length; i += 3) {
+      const [a, b, c] = triangles.slice(i, i + 3).map(id => loop[id]);
+      assert.ok(Math.abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) > 0);
+      for (let j = 0; j < 3; j++) {
+        const key = [triangles[i + j], triangles[i + (j + 1) % 3]].sort((a, b) => a - b).join(',');
+        edges.set(key, (edges.get(key) ?? 0) + 1);
+      }
+    }
+    loop.forEach((_, i) => assert.equal(edges.get([i, (i + 1) % loop.length].sort((a, b) => a - b).join(',')), 1));
+  }
+});
+
 test('successive near-collinear simplifications restore vertices on their original boundary edge', () => {
   const points = [[0.25343655286374, 0.33034829032847], [0.25801059518606, 0.34557590211199],
     [0.29460293376466, 0.467396796381], [0.36778761092187, 0.71103858491898], [0.7421875, 1], [0, 0.5]]

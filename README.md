@@ -458,6 +458,22 @@ point. Ellipses provide analytic tangents and use the ordinary adaptive sampling
 profile, lifting, and extrusion paths without new curve-type cases. Nonfinite
 inputs and nonpositive radii throw.
 
+## Anchor points
+
+`points(...geometry)` returns a flat `Point[]` from any mix of 2D geometry and
+nested arrays, including `rectangle()` results. Segments contribute start/end,
+curves contribute `at(0)`/`at(1)`, circles contribute their center, infinite lines
+contribute their defining point, and points contribute themselves. Sketches
+contribute their elements' anchors in local sketch coordinates.
+
+```ts
+const anchors = points(rectangle({ width: 10, height: 5 }), [circle(2), [{ x: 3, y: 4 }]]);
+```
+
+Argument and array order are preserved. Anchors with exactly equal XY coordinates
+are deduplicated, retaining the first point and its identity. No geometry is
+sampled or modified; empty input returns `[]`.
+
 ## SVG paths
 
 `svgPath({ d, position, scale })` uses the browser's native SVG path parser and
@@ -990,14 +1006,16 @@ counter. Only successful unnamed constructions increment it; explicit names do
 not. The counter persists for the loaded library instance. Color defaults to
 `'default'`, preserving the original gold (`#d2a568`), and alpha defaults to `1`.
 Alpha ranges from `0` (invisible) to `1` (opaque). Use the constructor or
-`annotatedNode(options)` for a general group, or wrap a solid with
-`annotate({ solid, name?, color?, alpha? })` / `solid.annotate(options)`.
-The wrapper retains the original solid without changing its geometry, topology,
+`annotatedNode(options)` for a general group, or wrap any node (including groups,
+transforms, and solids) with `annotate(node)`,
+`annotate({ node, name?, color?, alpha? })`, or `node.annotate(options)`.
+The wrapper retains the original node without changing its geometry, topology,
 children, or cached mesh. Annotation edits alone do not invalidate geometry.
 
 ```ts
 scene.add(body.annotate({ name: 'Housing', color: '#5599dd', alpha: 0.6 }));
 const assembly = annotatedNode({ name: 'Assembly', color: colors.amber }).add(body, extension);
+scene.add(node().add(body, extension).annotate({ name: 'Group', color: 'blue' }));
 scene.add(assembly);
 ```
 

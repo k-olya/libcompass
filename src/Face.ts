@@ -83,8 +83,14 @@ export class Face extends Surface {
     const uv = polygons.flat();
     legalizeTriangles(triangles, points.map((point, i) => ({ point, uv: uv[i] })));
     const positions = new Float32Array(triangles.length * 3);
-    triangles.forEach((index, i) => positions.set(points[index].position, i * 3));
-    return positions;
+    let offset = 0;
+    for (let i = 0; i < triangles.length; i += 3) {
+      const vertices = triangles.slice(i, i + 3).map(index => points[index].position);
+      const [a, b, c] = vertices.map(point => Array.from(point, Math.fround) as vec3);
+      if (vec3.length(vec3.cross([0, 0, 0], vec3.subtract([0, 0, 0], b, a), vec3.subtract([0, 0, 0], c, a))) === 0) continue;
+      for (const vertex of vertices) { positions.set(vertex, offset); offset += 3; }
+    }
+    return positions.slice(0, offset);
   }
 }
 

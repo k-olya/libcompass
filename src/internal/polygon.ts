@@ -1,10 +1,16 @@
 import type { Point } from '../Point.js';
 import earcut from 'earcut';
+import { legalizeTriangles } from './legalizeTriangles.js';
 
 type Loop = readonly Point[];
 
 function cross(a: Point, b: Point, c: Point): number {
   return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+}
+
+function degenerate(a: Point, b: Point, c: Point): boolean {
+  const roundoff = Number.EPSILON * 16 * (Math.abs((b.x - a.x) * (c.y - a.y)) + Math.abs((b.y - a.y) * (c.x - a.x)));
+  return Math.abs(cross(a, b, c)) <= roundoff;
 }
 
 /**
@@ -225,12 +231,18 @@ export function triangulatePolygon(loops: readonly Loop[], precision = 1e-10): n
     triangles.splice(selected.offset, 3, a, index, c, index, b, c);
     used.add(index);
   });
+  // Restoring a straight boundary run beside a tiny ear can split that ear
+  // into a collinear triangle. Flip its internal diagonal instead of dropping
+  // shared boundary stations or emitting a zero-area triangle.
+  for (let i = 0; i < triangles.length; i += 3) if (degenerate(...triangles.slice(i, i + 3).map(id => points[id]) as [Point, Point, Point])) {
+    legalizeTriangles(triangles, points.map(uv => ({ uv, point: { position: [uv.x, uv.y, 0] } })), [1, 0, 1], 'polygon');
+    break;
+  }
   let area = 0;
   for (let i = 0; i < triangles.length; i += 3) {
     const [a, b, c] = triangles.slice(i, i + 3).map(index => points[index]);
     const signed = cross(a, b, c);
-    const roundoff = Number.EPSILON * 16 * (Math.abs((b.x - a.x) * (c.y - a.y)) + Math.abs((b.y - a.y) * (c.x - a.x)));
-    if (Math.abs(signed) <= roundoff) throw new RangeError('Triangulation produced a degenerate triangle');
+    if (degenerate(a, b, c)) throw new RangeError('Triangulation produced a degenerate triangle');
     if ((signed > 0) !== (signedArea(outer) > 0)) [triangles[i + 1], triangles[i + 2]] = [triangles[i + 2], triangles[i + 1]];
     area += Math.abs(signed) / 2;
   }

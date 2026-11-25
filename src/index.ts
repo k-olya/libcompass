@@ -19,6 +19,8 @@ export { functionalize } from './util/functionalize.js';
 export { transformMat4 } from './util/transformMat4.js';
 export { PI, radtodeg, degtorad } from './util/angles.js';
 export type { Point } from './Point.js';
+export type { PointsTarget } from './PointsTarget.js';
+export { points } from './operations/points.js';
 export { Line, line } from './Line.js';
 export { LineSegment, lineSegment } from './LineSegment.js';
 export { roundPolyline } from './operations/roundPolyline.js';

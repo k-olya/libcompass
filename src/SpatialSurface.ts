@@ -66,6 +66,23 @@ export class SpatialSurface extends Surface {
     return validateVertex(this.evaluate(this.periodicU && u === 1 ? 0 : u, this.periodicV && v === 1 ? 0 : v));
   }
 
+  /** Partial derivatives in the native chart; subclasses may retain exact tangent evaluators. */
+  derivatives(u: number, v: number): { du: vec3; dv: vec3 } {
+    const at = (u: number, v: number) => this.at(this.periodicU ? (u % 1 + 1) % 1 : u,
+      this.periodicV ? (v % 1 + 1) % 1 : v).position;
+    const derivative = (axis: number): vec3 => {
+      const t = axis ? v : u, periodic = axis ? this.periodicV : this.periodicU, h = 1e-5;
+      const point = (t: number) => axis ? at(u, t) : at(t, v);
+      if (!periodic && (t < h || t > 1 - h)) {
+        const sign = t < 0.5 ? 1 : -1, a = point(t), b = point(t + sign * h), c = point(t + sign * 2 * h);
+        return [0, 1, 2].map(i => sign * (4 * (b[i] - a[i]) - (c[i] - a[i])) / (2 * h)) as vec3;
+      }
+      const low = periodic ? t - h : Math.max(0, t - h), high = periodic ? t + h : Math.min(1, t + h);
+      return vec3.scale([0, 0, 0], vec3.subtract([0, 0, 0], point(high), point(low)), 1 / (high - low));
+    };
+    return { du: derivative(0), dv: derivative(1) };
+  }
+
   /** Sample adaptively in both parameters; sampling never adds topological edges. */
   sample(): SurfaceGrid { return sampleSurface(this); }
 
@@ -79,6 +96,12 @@ export class SpatialSurface extends Surface {
     surface.sample = () => {
       const grid = this.sample();
       return { u: [...grid.u], v: [...grid.v], vertices: grid.vertices.map(row => row.map(vertex)) };
+    };
+    const zero = vertex({ position: [0, 0, 0] }).position;
+    surface.derivatives = (u, v) => {
+      const { du, dv } = this.derivatives(u, v);
+      const direction = (v: vec3) => vec3.subtract([0, 0, 0], vertex({ position: v }).position, zero);
+      return { du: direction(du), dv: direction(dv) };
     };
     return surface;
   }

@@ -1,6 +1,7 @@
 import { vec3 } from 'gl-matrix';
 import { Edge } from './Edge.js';
 import type { SpatialBoundary } from './SpatialBoundary.js';
+import type { SpatialCurve } from './SpatialCurve.js';
 import { SpatialSurface } from './SpatialSurface.js';
 import type { Vertex } from './Vertex.js';
 import { validateVertex } from './Vertex.js';
@@ -55,6 +56,20 @@ export class RuledSurface extends SpatialSurface {
     });
     this.start = start;
     this.end = end;
+  }
+
+  /** Differentiate the ruling and retain each rim's tangent direction at smooth joins. */
+  override derivatives(u: number, v: number): { du: vec3; dv: vec3 } {
+    const derivative = (boundary: SpatialBoundary): vec3 => {
+      const t = boundary.isLoop() ? (u % 1 + 1) % 1 : u, low = Math.max(0, t - 1e-5), high = Math.min(1, t + 1e-5);
+      const delta = vec3.subtract([0, 0, 0], boundary.at(high).position, boundary.at(low).position);
+      const tangent = (boundary as Partial<SpatialCurve>).tangent?.(t);
+      return tangent ? vec3.scale([0, 0, 0], tangent, vec3.length(delta) / (high - low)) : vec3.scale(delta, delta, 1 / (high - low));
+    };
+    const start = this.start.at(this.periodicU ? (u % 1 + 1) % 1 : u), apex = 'position' in this.end;
+    const end = apex ? this.end : this.end.at(this.periodicU ? (u % 1 + 1) % 1 : u);
+    return { du: vec3.lerp([0, 0, 0], derivative(this.start), apex ? [0, 0, 0] : derivative(this.end), v),
+      dv: vec3.subtract([0, 0, 0], end.position, start.position) };
   }
 
   /** Include a singular apex even when a periodic wall has no seam edges. */

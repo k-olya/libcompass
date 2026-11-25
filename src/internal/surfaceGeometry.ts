@@ -13,21 +13,8 @@ export const atSurface = (surface: ParametricFace, uv: Point): Vertex => surface
 /** Numerical differential frame; source evaluators remain authoritative. */
 export function surfaceFrame(surface: ParametricFace, uv: Point) {
   if (surface instanceof Face) return { du: surface.plane.xAxis, dv: surface.plane.yAxis, normal: surface.plane.normal };
-  const derivative = (axis: 'x' | 'y') => {
-    const periodic = axis === 'x' ? surface.periodicU : surface.periodicV;
-    if (!periodic && (uv[axis] < 1e-5 || uv[axis] > 1 - 1e-5)) {
-      const sign = uv[axis] < 0.5 ? 1 : -1, h = 1e-5;
-      const a = atSurface(surface, uv).position, b = atSurface(surface, { ...uv, [axis]: uv[axis] + sign * h }).position;
-      const c = atSurface(surface, { ...uv, [axis]: uv[axis] + sign * 2 * h }).position;
-      return [0, 1, 2].map(i => sign * (4 * (b[i] - a[i]) - (c[i] - a[i])) / (2 * h)) as vec3;
-    }
-    const a = periodic ? uv[axis] - 1e-5 : Math.max(0, uv[axis] - 1e-5);
-    const b = periodic ? uv[axis] + 1e-5 : Math.min(1, uv[axis] + 1e-5);
-    if (a === b) throw new RangeError('Cannot resolve surface derivatives');
-    return vec3.scale([0, 0, 0], vec3.subtract([0, 0, 0], atSurface(surface, { ...uv, [axis]: b }).position,
-      atSurface(surface, { ...uv, [axis]: a }).position), 1 / (b - a));
-  };
-  const du = derivative('x'), dv = derivative('y');
+  const source = surface instanceof SurfaceRegion ? surface.surface : surface;
+  const { du, dv } = source.derivatives(uv.x, uv.y);
   const normal = vec3.normalize([0, 0, 0], vec3.cross([0, 0, 0], du, dv));
   if (vec3.length(normal) === 0) throw new RangeError('Operation reaches a singular surface');
   if (surface.reversed) vec3.negate(normal, normal);

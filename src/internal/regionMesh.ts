@@ -129,6 +129,9 @@ export function regionMesh(region: SurfaceRegion, context: Tessellation): Float3
     for (let i = 0; i < triangles.length; i += 3) {
       const ids = triangles.slice(i, i + 3), [a, b, c] = ids.map(id => points[id].uv);
       if (((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x) < 0) !== region.reversed) [ids[1], ids[2]] = [ids[2], ids[1]];
+      const triangle = ids.map(id => Array.from(points[id].point.position, Math.fround) as vec3);
+      if (vec3.length(vec3.cross([0, 0, 0], vec3.subtract([0, 0, 0], triangle[1], triangle[0]),
+        vec3.subtract([0, 0, 0], triangle[2], triangle[0]))) === 0) continue;
       for (const id of ids) output.push(...Array.from(points[id].point.position));
     }
   }

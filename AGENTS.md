@@ -7,6 +7,11 @@
   forms. Distinguish the forms by type, class or the named wrapper field; do not
   guess between optional settings. Constructor shorthands and their constructors
   must accept the same argument forms.
+- `points(...geometry)` accepts variadic 2D geometry and recursively nested readonly
+  arrays, deduplicating local anchors by exact XY coordinates and retaining the
+  first occurrence and its identity. Circles contribute
+  their centers, other curves their at(0)/at(1), segments their endpoints, lines
+  their defining points, and sketches their elements' anchors.
 - Reserve `src/util/` for general helpers on other data, such as `functionalize`
   and the packed-coordinate `transformMat4` utility. These are distinct from CAD
   operations and may use positional arguments.
@@ -260,9 +265,9 @@ apply only to those node classes:
   from the immutable 16-entry `colors` palette and accepts only palette names
   or #RGB/#RRGGBB strings, including property assignments. Resolve names to hex;
   do not accept arbitrary CSS names/functions or RGB numbers.
-  `annotate({ solid, name?, color?, alpha? })` and `solid.annotate()`
-  create a new wrapper retaining the original solid. Annotations do not alter
-  geometry or STL exports. The app renders nearest-annotated subtrees separately,
+  `annotate(node)`, `annotate({ node, name?, color?, alpha? })`, and `node.annotate()`
+  wrap any Node, including groups and transforms, retaining the original node.
+  Annotations do not alter geometry or STL exports. The app renders nearest-annotated subtrees separately,
   excluding nested annotated geometry from ancestor meshes. Keep own triangles
   before child triangles in insertion order so world-space mesh ranges retain
   transforms and shared child occurrences without duplicating geometry.

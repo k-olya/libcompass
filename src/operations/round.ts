@@ -21,6 +21,8 @@ import { UnsupportedRoundError } from '../internal/roundUnsupported.js';
  * Rounds retain mathematical surfaces and shared exact contact curves. Three rounded
  * planar edges meet in a spherical corner. At the radius limit, consumed faces and
  * edges disappear: a cylinder can become a sphere, and a hollow cylinder a torus.
+ * Opposing rims can also meet along part of their contact curves, sharing exact
+ * boundaries and splitting the remaining planar face into disconnected patches.
  * Convex and concave edges between planar faces and smooth curved rims are supported.
  * Planar-edge rounds preserve unrelated curved surfaces and distant hole trims;
  * both kinds of round can be selected together on the same solid. Only the affected

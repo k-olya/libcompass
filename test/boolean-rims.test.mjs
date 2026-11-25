@@ -18,6 +18,23 @@ function volume(part) {
   return sum;
 }
 
+test('an asymmetric pencil box with a deep pocket supports bottom chamfer then top rounds', () => {
+  const body = sketch().add(roundPolyline({ segments: rectangle({ center, width: 76.5, height: 79.5 }), radius: 12 })).extrude(160);
+  const pocket = body.extrudeCut({ sketch: sketch(body.surfaces.find(surface => surface.plane?.normal[2] === 1))
+    .add(roundPolyline({ segments: rectangle({ center, width: 67.5, height: 73.5 }), radius: 9 })), length: -157 });
+  const tool = sketch().add(rectangle({ center, width: 160, height: 160 })).extrude(80)
+    .rotate({ axis: X, angle: 30 }).displace([0, 0, 120]);
+  const cut = pocket.difference({ tool }), chamfered = cut.chamfer({ length: 1, boundaries: bottom });
+  const cached = chamfered.triangulate(), bytes = cached.slice(), surfaces = [...chamfered.surfaces];
+  const result = chamfered.round({ radius: 1, boundaries: top });
+  assert.equal(result.surfaces.length, 8); assert.equal(result.boundaries.length, 7);
+  assert.ok(volume(result) < volume(chamfered));
+  const floor = chamfered.surfaces.find(surface => surface.plane?.normal[2] === 1);
+  assert.equal(floor.plane.origin[2], 3); assert.ok(result.surfaces.includes(floor));
+  assert.equal(chamfered.triangulate(), cached); assert.deepEqual(cached, bytes);
+  assert.deepEqual(chamfered.surfaces, surfaces);
+});
+
 test('chamfer and round reuse boolean-trimmed pencil-box walls and oblique cut rims', () => {
   const body = sketch().add(roundPolyline({ segments: rectangle({ center, width: 79.5, height: 79.5 }), radius: 12 })).extrude(160);
   const pocket = body.extrudeCut({ sketch: sketch(body.surfaces.find(surface => surface.plane?.normal[2] === 1))
@@ -57,6 +74,42 @@ test('chamfer and round reuse boolean-trimmed pencil-box walls and oblique cut r
   // At length 1 the two top bevels consume the three-unit wall at its narrowest
   // section. Keep rejecting that contact instead of returning a pinched solid.
   assert.throws(() => part.chamfer({ length: 1, boundaries: top }), RangeError);
+  assert.equal(part.triangulate(), cached); assert.deepEqual(cached, bytes);
+  assert.deepEqual(part.surfaces, surfaces); assert.deepEqual(part.boundaries, boundaries);
+});
+
+
+test('two-unit pencil-box walls round through partial rail convergence and reject overlap', () => {
+  const body = sketch().add(roundPolyline({ segments: rectangle({ center, width: 77.5, height: 79.5 }), radius: 8 })).extrude(160);
+  const pocket = body.extrudeCut({ sketch: sketch(body.surfaces.find(surface => surface.plane?.normal[2] === 1))
+    .add(roundPolyline({ segments: rectangle({ center, width: 71.5, height: 75.5 }), radius: 6 })), length: -158 });
+  const tool = sketch().add(rectangle({ center, width: 160, height: 160 })).extrude(80)
+    .rotate({ axis: X, angle: 30 }).displace([0, 0, 120]);
+  const part = pocket.difference({ tool }).chamfer({ length: 1, boundaries: bottom }), child = node();
+  part.add(child);
+  const cached = part.triangulate(), bytes = cached.slice(), surfaces = [...part.surfaces], boundaries = [...part.boundaries];
+  const initialVolume = volume(part);
+  for (const radius of [0.05, 0.2, 0.5, 0.9, 0.99, 1]) {
+    let result;
+    assert.doesNotThrow(() => { result = part.round({ radius, boundaries: top }); }, `Radius ${radius} must fit`);
+    const resultVolume = volume(result);
+    assert.ok(resultVolume > initialVolume * 0.99 && resultVolume < initialVolume * 1.001);
+    if (radius >= 0.5) assert.ok(resultVolume < initialVolume);
+    assert.deepEqual(result.children, [child]); assert.notEqual(result.children, part.children);
+    if (radius === 1) {
+      const caps = result.surfaces.filter(face => face.plane?.normal[2] > 0 && face.plane.normal[2] < 0.99);
+      assert.equal(caps.length, 2, 'The consumed strips divide the retained cap into two faces');
+      const blends = result.surfaces.slice(-2);
+      assert.ok(blends.every(surface => surface instanceof SurfaceRegion));
+      const shared = blends[0].boundaries.filter(boundary => blends[1].boundaries.includes(boundary));
+      assert.ok(shared.length >= 2, 'Opposing blends share the converged contact curves');
+      for (const boundary of shared) for (const t of [0.1, 0.5, 0.9]) {
+        const normals = blends.map(surface => surfaceFrame(surface, boundaryPlacement(surface, boundary).uv(t)).normal);
+        assert.ok(vec3.dot(...normals) > 1 - 1e-7, 'The converged blends remain tangent');
+      }
+    }
+  }
+  for (const radius of [1.001, 1.1]) assert.throws(() => part.round({ radius, boundaries: top }), RangeError);
   assert.equal(part.triangulate(), cached); assert.deepEqual(cached, bytes);
   assert.deepEqual(part.surfaces, surfaces); assert.deepEqual(part.boundaries, boundaries);
 });

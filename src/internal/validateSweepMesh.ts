@@ -47,7 +47,9 @@ export function validateSweepMesh(positions: Float32Array): void {
     if (remaining.size) throw new RangeError('Sweep touches itself at a nonmanifold vertex');
   });
   if (!Number.isFinite(volume) || volume <= 0) throw new RangeError('Sweep has zero or reversed volume');
-  const epsilon = scale * 1e-8;
+  // Float32 input coordinates are exact doubles here. Tolerance covers the
+  // arithmetic below; it must not impose a clearance between separate facets.
+  const epsilon = scale * Number.EPSILON * 64;
   const build = (items: Triangle[]): Tree => {
     const min = [0, 1, 2].map(i => items.reduce((value, item) => Math.min(value, item.min[i]), Infinity));
     const max = [0, 1, 2].map(i => items.reduce((value, item) => Math.max(value, item.max[i]), -Infinity));
@@ -100,7 +102,16 @@ function intersect(a: Triangle, b: Triangle, epsilon: number): boolean {
   const oneSide = (values: number[]) => values.every(x => x > epsilon) || values.every(x => x < -epsilon);
   if (oneSide(da) || oneSide(db)) return false;
   const allowed = (point: ReadonlyVec3) => shared.some(p => vec3.distance(p, point) <= epsilon * 4);
-  const inside = (point: ReadonlyVec3, triangle: Triangle, n: ReadonlyVec3) => triangle.points.every((p, i) => vec3.dot(cross(sub(triangle.points[(i + 1) % 3], p), sub(point, p)), n) >= -epsilon * vec3.distance(p, triangle.points[(i + 1) % 3]));
+  const inside = (point: ReadonlyVec3, triangle: Triangle, n: ReadonlyVec3) => {
+    if (triangle.points.every((p, i) => vec3.dot(cross(sub(triangle.points[(i + 1) % 3], p), sub(point, p)), n) >= 0)) return true;
+    // Expanding edge half-planes exaggerates tolerance at acute corners. Use
+    // Euclidean distance to finite edges so skinny, separated facets stay apart.
+    return triangle.points.some((p, i) => {
+      const edge = sub(triangle.points[(i + 1) % 3], p);
+      const t = Math.max(0, Math.min(1, vec3.dot(sub(point, p), edge) / vec3.squaredLength(edge)));
+      return vec3.distance(point, vec3.scaleAndAdd([0, 0, 0], p, edge, t)) <= epsilon;
+    });
+  };
   if (da.every(x => Math.abs(x) <= epsilon) && db.every(x => Math.abs(x) <= epsilon)) {
     // Coplanar vertices and edge crossings, including boundary contact.
     for (const [first, second, n] of [[a, b, nb], [b, a, na]] as const) {

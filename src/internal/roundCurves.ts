@@ -15,6 +15,7 @@ import { boundaryPlacement, moveSurfaceUV } from './surfaceRails.js';
 import { orientLoop } from './boundaryLoops.js';
 import { curveParameter, sliceSpatialCurve } from './curveTrimming.js';
 import { UnsupportedRoundError } from './roundUnsupported.js';
+import { RoundContacts } from './roundContacts.js';
 import { trimRegionRails } from './trimRegionRails.js';
 
 type Side = keyof SurfaceSides;
@@ -210,6 +211,7 @@ export function roundCurves(surfaces: readonly Surface[], selected: readonly Spa
       entries.set(boundary, { rail, uv: (t: number) => placement.uv(a + (b - a) * t), side: placement.side, reversed: placement.reversed }); replacements.set(surface, entries);
     }
   }
+  const contactTopology = new RoundContacts(topology);
   const retained = surfaces.flatMap(surface => {
     const entries = replacements.get(surface);
     if (!entries) return [surface];
@@ -228,7 +230,8 @@ export function roundCurves(surfaces: readonly Surface[], selected: readonly Spa
         return [...result, arc.boundary];
       }))];
     });
-    if (surface instanceof Face) { const face = topology.face(surface, loops); return face ? [face] : []; }
+    if (surface instanceof Face) return contactTopology.face(surface, loops,
+      new Set([...entries.values()].flatMap(trim => trim.rail.boundary ? [trim.rail.boundary] : [])));
     if (surface instanceof SurfaceRegion) {
       const rails = new Map([...entries].map(([boundary, trim]) => {
         if (!boundary.isLoop() || !trim.rail.boundary) throw new UnsupportedRoundError('Surface region rounds require closed, noncollapsing contact rails');
@@ -260,5 +263,5 @@ export function roundCurves(surfaces: readonly Surface[], selected: readonly Spa
       entries.has(boundary) ? entries.get(boundary)!.rail.boundary : boundary]));
     return [new TrimmedSurface({ surface: original, at: chart, sides, boundaryLoops: loops.filter(loop => loop.length) })];
   });
-  return [...retained, ...rounded];
+  return [...retained, ...rounded.map(surface => contactTopology.surface(surface))];
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AnnotatedNode, Memo, Node, Solid, annotate, annotatedNode, center, circle, colors, sketch } from 'libcompass';
+import { AnnotatedNode, Memo, Node, Solid, Transform, TransformMat4, annotate, annotatedNode, center, circle, colors, sketch } from 'libcompass';
 import { AnnotatedNode as DirectAnnotatedNode } from 'libcompass/AnnotatedNode';
 import { annotate as directAnnotate } from 'libcompass/operations/annotate';
 
@@ -35,7 +35,7 @@ test('annotate wraps the original solid without changing topology, children or m
   const child = new Node(); solid.add(child);
   const cached = solid.triangulate(), bytes = cached.slice();
   const surfaces = solid.surfaces, boundaries = solid.boundaries;
-  const group = annotate({ solid, name: 'Part', color: '#1188cc', alpha: 0 });
+  const group = annotate({ node: solid, name: 'Part', color: '#1188cc', alpha: 0 });
   assert.ok(group instanceof AnnotatedNode);
   assert.deepEqual(group.children, [solid]);
   assert.deepEqual([group.name, group.color, group.alpha], ['Part', '#1188cc', 0]);
@@ -43,13 +43,41 @@ test('annotate wraps the original solid without changing topology, children or m
   assert.equal(solid.triangulate(), cached);
   assert.equal(solid.surfaces, surfaces); assert.equal(solid.boundaries, boundaries);
   assert.deepEqual(solid.children, [child]);
-  assert.notEqual(annotate({ solid }), annotate({ solid }));
+  assert.notEqual(annotate({ node: solid }), annotate({ node: solid }));
   const method = solid.annotate({ name: 'Part', color: '#1188cc', alpha: 0 });
   assert.ok(method instanceof AnnotatedNode);
   assert.deepEqual([method.name, method.color, method.alpha], ['Part', '#1188cc', 0]);
   assert.deepEqual(method.children, [solid]);
   assert.deepEqual(method.triangulate(), group.triangulate());
   assert.deepEqual(solid.annotate().triangulate(), cached);
+});
+
+test('any node can be annotated, preserving grouped, transformed and nested geometry', () => {
+  class Triangle extends Memo {
+    triangulateUncached() { return new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]); }
+  }
+  const triangle = new Triangle(), inner = triangle.annotate({ name: 'Inner', color: 'blue' });
+  const group = new Node().add(triangle, inner);
+  const moved = new Transform().add(group);
+  moved.position.x = 5;
+  const matrix = new TransformMat4({ matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 2, 0, 1] }).add(moved);
+  for (const source of [new Node(), new Memo(), triangle, group, moved, matrix, inner]) {
+    const cached = source.triangulate(), bytes = cached.slice(), children = [...source.children];
+    for (const wrapper of [annotate(source), annotate({ node: source, name: 'Outer', color: 'red' }), source.annotate()]) {
+      assert.ok(wrapper instanceof AnnotatedNode);
+      assert.deepEqual(wrapper.children, [source]);
+      assert.deepEqual(wrapper.triangulate(), bytes);
+      assert.equal(wrapper.triangulate(), wrapper.triangulate());
+    }
+    assert.deepEqual(source.children, children);
+    assert.deepEqual(source.triangulate(), bytes);
+    if (source instanceof Memo) assert.equal(source.triangulate(), cached);
+  }
+  assert.deepEqual(Array.from(matrix.annotate().triangulate().slice(0, 9)), [5, 2, 0, 6, 2, 0, 5, 3, 0]);
+  assert.equal(inner.children[0], triangle);
+  assert.equal(group.children[1], inner);
+  assert.equal(inner.name, 'Inner');
+  assert.equal(inner.color, colors.blue);
 });
 
 test('palette has sixteen immutable distinct colors and accepts names or hex strings only', () => {
@@ -75,7 +103,7 @@ test('only successful unnamed constructions increment the hidden name counter', 
   assert.throws(() => annotatedNode({ color: 'not-a-color' }));
   assert.equal(new AnnotatedNode().name, `mesh${number + 1}`);
   const solid = new Solid({ surfaces: [] });
-  assert.equal(annotate({ solid }).name, `mesh${number + 2}`);
+  assert.equal(annotate({ node: solid }).name, `mesh${number + 2}`);
   assert.equal(solid.annotate().name, `mesh${number + 3}`);
   assert.equal(first.name, `mesh${number}`);
 });
@@ -90,6 +118,12 @@ test('invalid annotation options and color assignments throw instead of reaching
   }
   for (const color of [null, {}, [1, 0, 0], -1, 0x1188cc, 0.5, NaN, Infinity]) assert.throws(() => annotatedNode({ color }), TypeError);
   assert.throws(() => annotatedNode({ name: 42 }), TypeError);
-  for (const solid of [{}, new Node(), new Memo(), null]) assert.throws(() => annotate({ solid }), /requires a Solid/);
-  assert.ok(annotate({ solid: new Solid({ surfaces: [] }) }) instanceof AnnotatedNode);
+  for (const invalid of [{}, null, undefined, [], 1, 'node']) {
+    assert.throws(() => annotate(invalid), /requires a Node/);
+    assert.throws(() => annotate({ node: invalid }), /requires a Node/);
+    assert.throws(() => annotate({ solid: invalid }), /requires a Node/);
+  }
+  assert.throws(() => annotate({ node: null, solid: new Node() }), /requires a Node/);
+  assert.throws(() => annotate({ solid: new Solid({ surfaces: [] }) }), /requires a Node/);
+  assert.ok(annotate({ node: new Solid({ surfaces: [] }) }) instanceof AnnotatedNode);
 });

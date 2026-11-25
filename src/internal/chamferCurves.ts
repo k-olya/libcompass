@@ -7,9 +7,11 @@ import type { SpatialBoundary } from '../SpatialBoundary.js';
 import { SpatialSurface, type SurfaceSides } from '../SpatialSurface.js';
 import type { Surface } from '../Surface.js';
 import { TrimmedSurface } from '../TrimmedSurface.js';
+import { SurfaceRegion } from '../SurfaceRegion.js';
 import type { Vertex } from '../Vertex.js';
 import { atSurface, checkedUV, solve3, surfaceFrame, type ParametricFace } from './surfaceGeometry.js';
 import { SurfaceRail, boundaryPlacement, moveSurfaceUV } from './surfaceRails.js';
+import { trimRegionRails } from './trimRegionRails.js';
 
 type Side = keyof SurfaceSides;
 type Rail = { boundary: SpatialCurve; uv: (t: number) => Point; side?: Side };
@@ -61,7 +63,7 @@ export function chamferCurves(surfaces: readonly Surface[], selections: readonly
   for (const boundary of selections) {
     if (!boundary.isLoop()) throw new RangeError('Open curved chamfers require curved corner intersection trimming');
     const adjacent = surfaces.filter(surface => surface.boundaries.includes(boundary));
-    if (adjacent.length !== 2 || !adjacent.every(surface => surface instanceof Face || surface instanceof SpatialSurface)) {
+    if (adjacent.length !== 2 || !adjacent.every(surface => surface instanceof Face || surface instanceof SpatialSurface || surface instanceof SurfaceRegion)) {
       throw new RangeError('A chamfer boundary needs exactly two supported adjoining surfaces');
     }
     const [first, second] = adjacent as [ParametricFace, ParametricFace];
@@ -112,9 +114,10 @@ export function chamferCurves(surfaces: readonly Surface[], selections: readonly
       const entries = replacements.get(surface) ?? new Map<SpatialBoundary, Rail>();
       entries.set(boundary, { boundary: rails[index], uv: t => {
         const uv = pair(t).uv[index];
-        const side = index === 0 ? a.side : b.side;
         // The two ends of a periodic chart have equal positions, distinct UV coordinates.
-        return t === 1 && side ? (side[0] === 'v' ? { ...uv, x: uv.x + 1 } : { ...uv, y: uv.y + 1 }) : uv;
+        const placement = index === 0 ? a : b;
+        const start = placement.uv(0), end = placement.uv(1);
+        return t === 1 ? { x: uv.x + end.x - start.x, y: uv.y + end.y - start.y } : uv;
       }, side: index === 0 ? a.side : b.side });
       replacements.set(surface, entries);
     });
@@ -128,6 +131,7 @@ export function chamferCurves(surfaces: readonly Surface[], selections: readonly
     if (!entries) return surface;
     const loops = surface.boundaryLoops.map(loop => loop.map(boundary => entries.get(boundary)?.boundary ?? boundary));
     if (surface instanceof Face) return new Face({ outer: loops[0], holes: loops.slice(1), plane: surface.plane });
+    if (surface instanceof SurfaceRegion) return trimRegionRails(surface, entries, loops);
     const source = surface as SpatialSurface;
     const trims = new Map([...entries.values()].map(rail => [rail.side!, rail]));
     const sides = Object.fromEntries(Object.entries(source.sides).map(([side, boundary]) => [side, entries.get(boundary)?.boundary ?? boundary]));

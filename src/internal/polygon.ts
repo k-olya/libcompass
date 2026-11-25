@@ -177,6 +177,23 @@ export function triangulatePolygon(loops: readonly Loop[], precision = 1e-10): n
   const used = new Set(triangles);
   points.forEach((point, index) => {
     if (used.has(index)) return;
+    // Restore in boundary order. Repeated near-collinear simplifications can
+    // accumulate more deviation than one local tolerance, while the original
+    // neighboring vertices still identify the exact edge to split.
+    let loopOffset = 0;
+    const loop = loops.find(loop => {
+      if (index < loopOffset + loop.length) return true;
+      loopOffset += loop.length; return false;
+    })!;
+    const neighbor = (step: number) => {
+      let local = index - loopOffset;
+      for (let i = 0; i < loop.length; i++) {
+        local = (local + step + loop.length) % loop.length;
+        if (used.has(loopOffset + local)) return loopOffset + local;
+      }
+      throw new RangeError('Triangulation omitted a boundary loop');
+    };
+    const before = neighbor(-1), after = neighbor(1);
     const key = (a: number, b: number) => a < b ? `${a},${b}` : `${b},${a}`;
     const edges = new Map<string, number>();
     for (let i = 0; i < triangles.length; i += 3) {
@@ -191,6 +208,9 @@ export function triangulatePolygon(loops: readonly Loop[], precision = 1e-10): n
     for (let i = 0; i < triangles.length; i += 3) for (let j = 0; j < 3; j++) {
       const first = triangles[i + j], last = triangles[i + (j + 1) % 3];
       if (edges.get(key(first, last)) !== 1) continue;
+      if ((first === before && last === after) || (first === after && last === before)) {
+        selected = { offset: i, edge: j }; nearest = -Infinity; continue;
+      }
       const a = points[first], b = points[last], dx = b.x - a.x, dy = b.y - a.y, length = Math.hypot(dx, dy);
       const t = ((point.x - a.x) * dx + (point.y - a.y) * dy) / (length * length);
       if (t <= 0 || t >= 1) continue;

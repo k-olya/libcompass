@@ -2,9 +2,10 @@ import { vec3, type ReadonlyVec3 } from 'gl-matrix';
 import { Face } from '../Face.js';
 import type { Point } from '../Point.js';
 import { SpatialSurface } from '../SpatialSurface.js';
+import { SurfaceRegion } from '../SurfaceRegion.js';
 import type { Vertex } from '../Vertex.js';
 
-export type ParametricFace = Face | SpatialSurface;
+export type ParametricFace = Face | SpatialSurface | SurfaceRegion;
 export const atSurface = (surface: ParametricFace, uv: Point): Vertex => surface instanceof Face
   ? surface.plane.toWorld(uv) : surface.at(surface.periodicU ? (uv.x % 1 + 1) % 1 : uv.x,
     surface.periodicV ? (uv.y % 1 + 1) % 1 : uv.y);

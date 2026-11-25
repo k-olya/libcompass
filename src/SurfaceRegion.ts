@@ -60,6 +60,11 @@ export class SurfaceRegion extends Surface {
   /** Evaluate the underlying mathematical surface on [0, 1]², including outside retained trims. */
   at(u: number, v: number): Vertex { return this.surface.at(u, v); }
 
+  /** U periodicity of the original parameter chart. */
+  get periodicU(): boolean { return this.surface.periodicU; }
+  /** V periodicity of the original parameter chart. */
+  get periodicV(): boolean { return this.surface.periodicV; }
+
   protected override copyTransformed({ map }: RigidContext): SurfaceRegion {
     const trim = (item: SurfaceTrim): SurfaceTrim => ({ ...item, boundary: map(item.boundary) });
     return new SurfaceRegion({ surface: map(this.surface), regions: this.regions.map(chart => ({

@@ -153,7 +153,7 @@
   or empty lists select all; a selector or nonempty list with no matches selects none.
   Round uses the same selector types and helper. Setback and angle reference the first adjoining surface in
   solid.surfaces order. Curved trims retain the source evaluator through a
-  TrimmedSurface chart and share exact rails with the bevel. Smooth closed rims
+  TrimmedSurface chart or retained SurfaceRegion charts and share exact rails with the bevel. Smooth closed rims
   may combine tangent lines and curves. Convex chamfers
   cut into material, while concave chamfers fill the adjacent void (e.g. a pocket
   floor). Determine that side from retained directions and adjoining normals;
@@ -185,6 +185,8 @@
   Retry only explicit UnsupportedRoundError capability gaps, from original geometry
   with fresh topology; never mask invalid radii, collisions or unresolved geometry.
   Preserve native directions and sampler parameters through source-chart trims.
+  Closed, noncollapsing rims on boolean SurfaceRegions support both operations,
+  including oblique planar cuts; retain unrelated trims and original source charts.
   Reject unsupported corners, overlaps and unresolved
   intersections explicitly rather than substituting faceted geometry.
 - Geometric trims take cutting geometry, not parameter ranges: `trimCurve`

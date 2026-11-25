@@ -7,6 +7,7 @@ import { orientLoop, sampleLoop } from './internal/boundaryLoops.js';
 import { signedArea, triangulatePolygon, validateLoops } from './internal/polygon.js';
 import type { Tessellation } from './internal/Tessellation.js';
 import type { RigidContext } from './internal/rigidContext.js';
+import { legalizeTriangles } from './internal/legalizeTriangles.js';
 
 /**
  * A planar surface trimmed by exact edges and spatial curves.
@@ -79,6 +80,8 @@ export class Face extends Surface {
     if (signedArea(polygons[0]) < 0) {
       for (let i = 0; i < triangles.length; i += 3) [triangles[i + 1], triangles[i + 2]] = [triangles[i + 2], triangles[i + 1]];
     }
+    const uv = polygons.flat();
+    legalizeTriangles(triangles, points.map((point, i) => ({ point, uv: uv[i] })));
     const positions = new Float32Array(triangles.length * 3);
     triangles.forEach((index, i) => positions.set(points[index].position, i * 3));
     return positions;

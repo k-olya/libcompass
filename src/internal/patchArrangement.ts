@@ -1,7 +1,8 @@
 import type { Point } from '../Point.js';
+import earcut from 'earcut';
 import type { PatchPath, ParametricPatch } from './parametricPatch.js';
 import { parameterizedSamples } from './curveSamples.js';
-import { containsPoint, signedArea, triangulatePolygon } from './polygon.js';
+import { containsPoint, signedArea, validateLoops } from './polygon.js';
 
 export type ArrangementArc = { path: PatchPath; start: number; end: number; reversed: boolean };
 export type ArrangementRegion = { outer: ArrangementArc[]; holes: ArrangementArc[][]; probe: Point };
@@ -129,7 +130,19 @@ export function patchArrangement(patch: ParametricPatch, additional: readonly Pa
     });
     const polygons = [outer.polygon, ...holes.map(h => h.polygon)], points = polygons.flat();
     let triangles: number[];
-    try { triangles = triangulatePolygon(polygons, 1e-14); }
+    try {
+      validateLoops(polygons);
+      let offset = outer.polygon.length;
+      const holes = polygons.slice(1).map(loop => { const index = offset; offset += loop.length; return index; });
+      // This mesh only locates an interior probe. Near-collinear discovery
+      // stations need not survive as triangle vertices; exact arcs remain below.
+      triangles = earcut(points.flatMap(point => [point.x, point.y]), holes);
+      let area = 0;
+      for (let i = 0; i < triangles.length; i += 3) area += Math.abs(cross(sub(points[triangles[i + 1]], points[triangles[i]]),
+        sub(points[triangles[i + 2]], points[triangles[i]]))) / 2;
+      const expected = Math.abs(signedArea(polygons[0])) - polygons.slice(1).reduce((sum, loop) => sum + Math.abs(signedArea(loop)), 0);
+      if (!triangles.length || Math.abs(area - expected) > Math.max(1e-12, expected * 1e-8)) throw new RangeError('Incomplete surface trim arrangement');
+    }
     catch (cause) { throw new RangeError('Surface trim arrangement is tangent, coincident or numerically unresolved', { cause }); }
     let largest = -Infinity, probe = points[0];
     for (let i = 0; i < triangles.length; i += 3) {

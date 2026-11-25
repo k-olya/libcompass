@@ -26,6 +26,8 @@ import { UnsupportedRoundError } from '../internal/roundUnsupported.js';
  * both kinds of round can be selected together on the same solid. Only the affected
  * edge/corner neighborhood must be planar. Interference with other trims throws.
  * Rims may combine tangent straight and curved sections, including pocket lips and floors.
+ * Closed, noncollapsing rims on boolean-trimmed surface regions are supported,
+ * including oblique planar cuts; source equations and unrelated trims are retained.
  * Unsupported analytic configurations retry the numerical surface-offset solver,
  * including open boundaries between planar/curved surfaces with planar end caps.
  * Oblique planar ends are intersected with the blend when source charts permit it.

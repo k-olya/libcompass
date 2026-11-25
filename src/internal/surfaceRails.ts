@@ -1,5 +1,6 @@
 import { vec3, type ReadonlyVec3 } from 'gl-matrix';
 import { Face } from '../Face.js';
+import { SurfaceRegion } from '../SurfaceRegion.js';
 import type { Point } from '../Point.js';
 import { SpatialCurve } from '../SpatialCurve.js';
 import type { SpatialBoundary } from '../SpatialBoundary.js';
@@ -51,6 +52,40 @@ export function boundaryPlacement(surface: ParametricFace, boundary: SpatialBoun
     return { uv: (t: number) => surface.plane.toLocal(boundary.at(t)),
       inward: (_uv: Point, tangent: ReadonlyVec3) => vec3.scale([0, 0, 0],
         vec3.cross([0, 0, 0], surface.plane.normal, tangent), sign), side: undefined, reversed: false };
+  }
+  if (surface instanceof SurfaceRegion) {
+    const parameters = new Map<SpatialBoundary, number[]>();
+    const sampled = (boundary: SpatialBoundary) => {
+      let values = parameters.get(boundary);
+      if (!values) { values = parameterizedSamples(boundary).map(({ t }) => t); parameters.set(boundary, values); }
+      return values;
+    };
+    const paths = surface.regions.flatMap(chart => [chart.outer, ...(chart.holes ?? [])].flatMap((loop, index) => {
+      const polygon = loop.flatMap(trim => {
+        const values = [...new Set([trim.start ?? 0, ...sampled(trim.boundary)
+          .filter(t => t > (trim.start ?? 0) && t < (trim.end ?? 1)), trim.end ?? 1])].sort((a, b) => a - b);
+        if (trim.reversed) values.reverse();
+        return values.slice(0, -1).map(trim.at);
+      });
+      return loop.filter(trim => trim.physical !== false && trim.boundary === boundary).map(trim => ({ trim,
+        sign: Math.sign(signedArea(polygon)) * (index ? -1 : 1) * (trim.reversed ? -1 : 1) * (surface.reversed ? -1 : 1) }));
+    })).sort((a, b) => (a.trim.start ?? 0) - (b.trim.start ?? 0));
+    if (!paths.length) throw new RangeError('Boundary does not belong to the surface region');
+    let end = paths[0].trim.at(paths[0].trim.start ?? 0);
+    const lifted = paths.map(({ trim, sign }) => {
+      const start = trim.at(trim.start ?? 0), shift = { x: surface.periodicU ? Math.round(end.x - start.x) : 0,
+        y: surface.periodicV ? Math.round(end.y - start.y) : 0 };
+      const at = (t: number) => { const p = trim.at(t); return { x: p.x + shift.x, y: p.y + shift.y }; };
+      end = at(trim.end ?? 1); return { trim, sign, at };
+    });
+    const path = (t: number) => {
+      const found = lifted.find(({ trim }) => t >= (trim.start ?? 0) - 1e-10 && t <= (trim.end ?? 1) + 1e-10);
+      if (!found) throw new RangeError('Surface region does not retain the full boundary interval');
+      return found;
+    };
+    return { uv: (t: number) => path(t).at(t), side: undefined, reversed: false,
+      inward: (uv: Point, tangent: ReadonlyVec3) => vec3.scale([0, 0, 0],
+        vec3.cross([0, 0, 0], surfaceFrame(surface, uv).normal, tangent), lifted[0].sign) };
   }
   const side = (Object.keys(surface.sides) as Side[]).find(key => surface.sides[key] === boundary);
   if (!side) throw new RangeError('Surface trimming requires the curved boundary to have a surface parameter side');

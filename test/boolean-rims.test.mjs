@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { vec3 } from 'gl-matrix';
+import { center, negZ, node, rectangle, roundPolyline, sketch, SurfaceRegion, X } from 'libcompass';
+import { validateSweepMesh } from '../dist/internal/validateSweepMesh.js';
+import { surfaceFrame } from '../dist/internal/surfaceGeometry.js';
+import { boundaryPlacement } from '../dist/internal/surfaceRails.js';
+
+const bottom = ({ face }) => face?.plane.normal && vec3.equals(face.plane.normal, negZ);
+const top = ({ face }) => face?.plane.normal[2] > 0 && face.plane.normal[2] < 0.99;
+function volume(part) {
+  const positions = part.triangulate();
+  validateSweepMesh(positions);
+  for (const boundary of part.boundaries) assert.equal(part.surfaces.filter(surface => surface.boundaries.includes(boundary)).length, 2);
+  let sum = 0;
+  for (let i = 0; i < positions.length; i += 9) sum += vec3.dot(positions.subarray(i, i + 3),
+    vec3.cross([0, 0, 0], positions.subarray(i + 3, i + 6), positions.subarray(i + 6, i + 9))) / 6;
+  return sum;
+}
+
+test('chamfer and round reuse boolean-trimmed pencil-box walls and oblique cut rims', () => {
+  const body = sketch().add(roundPolyline({ segments: rectangle({ center, width: 79.5, height: 79.5 }), radius: 12 })).extrude(160);
+  const pocket = body.extrudeCut({ sketch: sketch(body.surfaces.find(surface => surface.plane?.normal[2] === 1))
+    .add(roundPolyline({ segments: rectangle({ center, width: 73.5, height: 73.5 }), radius: 9 })), length: -77 });
+  const tool = sketch().add(rectangle({ center, width: 160, height: 160 })).extrude(80)
+    .rotate({ axis: X, angle: 30 }).displace([0, 0, 120]);
+  const part = pocket.difference({ tool }), child = node(); part.add(child);
+  const cached = part.triangulate(), bytes = cached.slice(), surfaces = [...part.surfaces], boundaries = [...part.boundaries];
+  const originalVolume = volume(part);
+  const bottomChamfer = part.chamfer({ length: 1, boundaries: bottom });
+  const bottomRound = part.round({ radius: 1, boundaries: bottom });
+  const topChamfer = part.chamfer({ length: 0.5, boundaries: top });
+  const topRound = bottomChamfer.round({ radius: 1, boundaries: top });
+  for (const result of [bottomChamfer, bottomRound, topChamfer, topRound]) {
+    const resultVolume = volume(result);
+    assert.ok(resultVolume > originalVolume * 0.99 && resultVolume < originalVolume);
+    assert.deepEqual(result.children, [child]); assert.notEqual(result.children, part.children);
+    assert.ok(result.surfaces.includes(surfaces[1]), 'The distant pocket floor stays unchanged');
+    for (const region of result.surfaces.filter(surface => surface instanceof SurfaceRegion)) {
+      assert.ok(surfaces.some(source => source instanceof SurfaceRegion && source.surface === region.surface));
+      assert.deepEqual(region.at(0.37, 0.43), region.surface.at(0.37, 0.43));
+    }
+  }
+  // The two top blends must be tangent to their retained walls and cap, with
+  // constant-radius circular cross sections, rather than faceted substitutes.
+  for (const patch of topRound.surfaces.slice(-2)) for (const u of [0.05, 0.19, 0.41, 0.61, 0.93]) {
+    const centers = [patch.sides.v0, patch.sides.v1].map(boundary => {
+      const surface = topRound.surfaces.find(surface => surface !== patch && surface.boundaries.includes(boundary));
+      const uv = boundaryPlacement(surface, boundary).uv(u), normal = surfaceFrame(surface, uv).normal;
+      const blendNormal = surfaceFrame(patch, { x: u, y: boundary === patch.sides.v0 ? 0 : 1 }).normal;
+      assert.ok(vec3.distance(normal, blendNormal) < 1e-5, JSON.stringify({ u, uv, normal, blendNormal }));
+      return vec3.subtract([0, 0, 0], boundary.at(u).position, normal);
+    });
+    assert.ok(vec3.distance(...centers) < 1e-5);
+    assert.ok(Math.abs(vec3.distance(patch.at(u, 0.37).position, centers[0]) - 1) < 1e-5);
+  }
+  // At length 1 the two top bevels consume the three-unit wall at its narrowest
+  // section. Keep rejecting that contact instead of returning a pinched solid.
+  assert.throws(() => part.chamfer({ length: 1, boundaries: top }), RangeError);
+  assert.equal(part.triangulate(), cached); assert.deepEqual(cached, bytes);
+  assert.deepEqual(part.surfaces, surfaces); assert.deepEqual(part.boundaries, boundaries);
+});

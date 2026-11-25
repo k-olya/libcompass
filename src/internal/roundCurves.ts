@@ -6,6 +6,7 @@ import type { SpatialBoundary } from '../SpatialBoundary.js';
 import { SpatialSurface, type SurfaceSides } from '../SpatialSurface.js';
 import type { Surface } from '../Surface.js';
 import { TrimmedSurface } from '../TrimmedSurface.js';
+import { SurfaceRegion } from '../SurfaceRegion.js';
 import type { Vertex } from '../Vertex.js';
 import { parameterizedSamples } from './curveSamples.js';
 import { RoundTopology, spherical, sub, unit, type RoundRail } from './roundTopology.js';
@@ -14,6 +15,7 @@ import { boundaryPlacement, moveSurfaceUV } from './surfaceRails.js';
 import { orientLoop } from './boundaryLoops.js';
 import { curveParameter, sliceSpatialCurve } from './curveTrimming.js';
 import { UnsupportedRoundError } from './roundUnsupported.js';
+import { trimRegionRails } from './trimRegionRails.js';
 
 type Side = keyof SurfaceSides;
 type Trim = { rail: RoundRail; uv(t: number): Point; side?: Side; reversed: boolean };
@@ -43,7 +45,7 @@ export function roundCurves(surfaces: readonly Surface[], selected: readonly Spa
   for (const boundary of selected) {
     const closed = boundary.isLoop();
     const adjacent = surfaces.filter(surface => surface.boundaries.includes(boundary));
-    if (adjacent.length !== 2 || !adjacent.every(surface => surface instanceof Face || surface instanceof SpatialSurface)) {
+    if (adjacent.length !== 2 || !adjacent.every(surface => surface instanceof Face || surface instanceof SpatialSurface || surface instanceof SurfaceRegion)) {
       throw new RangeError('Round requires two regular adjoining planar or spatial surfaces');
     }
     const source = adjacent as ParametricFace[], placements = source.map(surface => boundaryPlacement(surface, boundary));
@@ -52,6 +54,10 @@ export function roundCurves(surfaces: readonly Surface[], selected: readonly Spa
       const t = closed && parameter === 1 ? 0 : parameter, cached = cache.get(t);
       if (cached) return cached;
       const origin = boundary.at(t), tangent = boundary instanceof SpatialCurve ? boundary.tangent(t) : unit(sub(boundary.end.position, boundary.start.position));
+      // Differencing world coordinates limits normal accuracy, independently of
+      // radius. Do not demand residuals below that roundoff floor on large parts.
+      const tolerance = Math.max(1e-11, radius * 1e-10,
+        Math.min(radius * 1e-7, Math.max(radius, ...Array.from(origin.position, Math.abs)) * Number.EPSILON * 64 / 1e-5));
       const initial = placements.map(placement => placement.uv(t)), initialNormals = source.map((surface, i) => surfaceFrame(surface, initial[i]).normal);
       const cosine = vec3.dot(initialNormals[0], initialNormals[1]);
       if (cosine < -1 + 1e-8 || cosine > 1 - 1e-8) throw new RangeError('Round requires a sharp regular boundary');
@@ -71,19 +77,37 @@ export function roundCurves(surfaces: readonly Surface[], selected: readonly Spa
       };
       for (let iteration = 0; ; iteration++) {
         const result = evaluate(uv);
-        if (Math.hypot(...result.residual) <= Math.max(1e-11, radius * 1e-10)) {
+        if (Math.hypot(...result.residual) <= Math.max(1e-11, radius * 1e-10)
+          || (iteration >= 20 && Math.hypot(...result.residual) <= tolerance)) {
           for (let i = 0; i < 2; i++) if (vec3.dot(sub(result.points[i].position, origin.position), placements[i].inward(initial[i], tangent)) < -topology.tolerance) {
             throw new RangeError('Round contacts leave the retained surfaces');
           }
-          const value = { uv, points: result.points, normals: result.normals, center: result.center, sense };
+          // Reconstruct the radius circle through both exact contact points.
+          // A residual at the finite-difference roundoff floor must not leave a
+          // tiny jump between a blend's interior and its shared endpoint rails.
+          const chord = sub(result.points[1].position, result.points[0].position), length = vec3.length(chord);
+          if (length === 0) throw new RangeError('Round contact circle is singular');
+          if (length > 2 * radius + tolerance) throw new RangeError('Round contacts exceed the ball diameter');
+          const middle = vec3.lerp([0, 0, 0], result.points[0].position, result.points[1].position, 0.5);
+          const across = sub(result.center, middle);
+          vec3.scaleAndAdd(across, across, chord, -vec3.dot(across, chord) / (length * length));
+          const center = vec3.scaleAndAdd([0, 0, 0], middle, unit(across), Math.sqrt(Math.max(0, radius * radius - length * length / 4)));
+          const normals = result.points.map(point => vec3.scale([0, 0, 0], unit(sub(point.position, center)), sense));
+          const value = { uv, points: result.points, normals, center, sense };
           cache.set(t, value); return value;
         }
         if (iteration >= 30) throw new RangeError('Round offset-surface intersection did not converge');
         const columns = [0, 1, 2, 3].map(index => {
-          const i = index >> 1, axis = index % 2 === 0 ? 'x' : 'y', h = 1e-5;
+          const i = index >> 1, axis = index % 2 === 0 ? 'x' : 'y';
+          const frame = surfaceFrame(source[i], uv[i]);
+          // Shrink the Jacobian probe near a root, especially where a smooth
+          // joined profile changes parameter speed or crosses a periodic seam.
+          const h = iteration < 10 ? 1e-5 : Math.max(1e-10, Math.min(1e-5, Math.hypot(...result.residual)
+            * 0.01 / vec3.length(axis === 'x' ? frame.du : frame.dv)));
           const a = uv.map(point => ({ ...point })), b = uv.map(point => ({ ...point }));
-          a[i] = checkedUV(source[i], { ...a[i], [axis]: a[i][axis] - (a[i][axis] < h && source[i] instanceof SpatialSurface ? 0 : h) });
-          b[i] = checkedUV(source[i], { ...b[i], [axis]: b[i][axis] + (b[i][axis] > 1 - h && source[i] instanceof SpatialSurface ? 0 : h) });
+          const surface = source[i], bounded = !(surface instanceof Face) && !(axis === 'x' ? surface.periodicU : surface.periodicV);
+          a[i] = checkedUV(surface, { ...a[i], [axis]: a[i][axis] - (a[i][axis] < h && bounded ? 0 : h) });
+          b[i] = checkedUV(surface, { ...b[i], [axis]: b[i][axis] + (b[i][axis] > 1 - h && bounded ? 0 : h) });
           const first = evaluate(a).residual, second = evaluate(b).residual;
           return first.map((value, j) => (second[j] - value) / (b[i][axis] - a[i][axis]));
         });
@@ -145,7 +169,7 @@ export function roundCurves(surfaces: readonly Surface[], selected: readonly Spa
       entries.set(boundary, { rail: rails[index], uv: (t: number) => {
         const uv = pair(station(t, index)).uv[index];
         const start = placements[index].uv(0), end = placements[index].uv(1);
-        return closed && t === 1 && side ? { x: uv.x + end.x - start.x, y: uv.y + end.y - start.y } : uv;
+        return closed && t === 1 ? { x: uv.x + end.x - start.x, y: uv.y + end.y - start.y } : uv;
       }, side, reversed: placements[index].reversed });
       replacements.set(surface, entries);
     });
@@ -205,6 +229,13 @@ export function roundCurves(surfaces: readonly Surface[], selected: readonly Spa
       }))];
     });
     if (surface instanceof Face) { const face = topology.face(surface, loops); return face ? [face] : []; }
+    if (surface instanceof SurfaceRegion) {
+      const rails = new Map([...entries].map(([boundary, trim]) => {
+        if (!boundary.isLoop() || !trim.rail.boundary) throw new UnsupportedRoundError('Surface region rounds require closed, noncollapsing contact rails');
+        return [boundary, { boundary: trim.rail.boundary, uv: trim.uv }] as const;
+      }));
+      return [trimRegionRails(surface, rails, loops)];
+    }
     const original = surface as SpatialSurface;
     const trims = new Map([...entries.values()].map(trim => [trim.side!, trim]));
     const uv = (side: Side, t: number) => {

@@ -26,6 +26,8 @@ import { searchBoundaries, type BoundarySelector } from './searchBoundaries.js';
  * Smooth closed rims retain their evaluators and trim the adjoining surface charts,
  * including rims combining tangent straight and curved sections. Convex bevels
  * remove material; concave bevels add it at corners such as pocket floors.
+ * Closed rims on boolean-trimmed surface regions retain the original surface
+ * equations and all unrelated trims, including oblique planar cut rims.
  * Convex straight edges between planar faces use analytic clipping planes.
  * Bevels meeting at planar corners are intersected together. Open curved corners,
  * concave straight corners, overlapping trims, and unresolved surface intersections

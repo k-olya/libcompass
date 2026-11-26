@@ -221,16 +221,17 @@ Both operations and their solid methods use
 `searchBoundaries({ solid, boundaries })`. Pass one selector or a mixed list.
 Each selector may be an index in
 `solid.boundaries`, a boundary object from that array, a planar `Face` from
-`solid.surfaces`, or a predicate `({ solid, face, boundary }) => boolean`.
+`solid.surfaces`, or a predicate `({ solid, face, boundary }) => unknown`.
 A face expands to all its outer and hole boundaries. Predicates test every
-boundary against every adjoining planar face, including it if any test matches.
+boundary against every adjoining planar face, including it if any result is truthy.
+Results use ordinary JavaScript truthiness, so falsey values select nothing.
 For a boundary adjoining only curved surfaces, the predicate runs once with
 `face: undefined`. All predicates run even when another selector already matched.
 
 The helper returns the original boundary objects, unique by identity and in
 first-match order. Indices and objects must belong to the input solid's own
-topology; child solids are excluded. Invalid selectors and nonboolean predicate
-results throw. A selector or nonempty list with no matches selects nothing: chamfer and round
+topology; child solids are excluded. Invalid selectors throw; predicate exceptions
+propagate unchanged. A selector or nonempty list with no matches selects nothing: chamfer and round
 return a fresh solid with unchanged geometry. Omitted or empty lists select all.
 `BoundarySelector` and `BoundaryPredicate` are exported types.
 

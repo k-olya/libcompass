@@ -60,6 +60,19 @@ test('boundaries adjoining only curved surfaces receive face: undefined once', (
   assert.deepEqual(matches, sphere.boundaries);
   assert.equal(calls.length, sphere.boundaries.length);
   assert.ok(calls.every(context => context.solid === sphere && context.face === undefined && 'face' in context));
+  assert.deepEqual(searchBoundaries({ solid: sphere, boundaries: ({ face }) => face?.plane.normal[2] }), []);
+});
+
+test('predicate results use JavaScript truthiness for all value types', () => {
+  const solid = cube();
+  for (const value of [false, undefined, null, 0, -0, 0n, NaN, '']) {
+    assert.deepEqual(searchBoundaries({ solid, boundaries: () => value }), []);
+  }
+  for (const value of [true, 1, -1, 1n, 'false', [], {}, Symbol('match'), () => {}, Promise.resolve(false)]) {
+    assert.deepEqual(searchBoundaries({ solid, boundaries: () => value }), solid.boundaries);
+  }
+  const cap = solid.surfaces[1];
+  assert.deepEqual(searchBoundaries({ solid, boundaries: ({ face }) => face === cap ? face : undefined }), cap.boundaries);
 });
 
 test('chamfer and round operation/method forms resolve mixed selectors exactly as original indices', () => {
@@ -68,7 +81,7 @@ test('chamfer and round operation/method forms resolve mixed selectors exactly a
   for (const operation of [chamfer, round]) {
     const name = operation === chamfer ? 'chamfer' : 'round';
     const expected = operation({ solid, boundaries: [index] }).triangulate();
-    for (const boundaries of [index, boundary, cap, ({ face }) => face === cap, [boundary], [cap], [index, boundary, cap, ({ face }) => face === cap]]) {
+    for (const boundaries of [index, boundary, cap, ({ face }) => face === cap, ({ face }) => face === cap ? face : undefined, [boundary], [cap], [index, boundary, cap, ({ face }) => face === cap]]) {
       const result = operation({ solid, boundaries });
       assert.deepEqual(result.triangulate(), expected);
       assert.deepEqual(solid[name]({ boundaries }).triangulate(), expected);
@@ -109,9 +122,6 @@ test('invalid indices, foreign topology, malformed selectors and predicate error
     for (const operation of [chamfer, round]) assert.throws(() => operation({ solid, boundaries }), RangeError);
   }
   assert.throws(() => searchBoundaries({ solid: {} }), TypeError);
-  for (const value of [undefined, 1, 'true', Promise.resolve(true)]) {
-    assert.throws(() => searchBoundaries({ solid, boundaries: [() => value] }), /must return a boolean/);
-  }
   const failure = new Error('selector failed');
   assert.throws(() => searchBoundaries({ solid, boundaries: [() => { throw failure; }] }), error => error === failure);
   const withChildren = cube().add(foreign);

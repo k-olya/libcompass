@@ -2,7 +2,7 @@ import { Face } from '../Face.js';
 import { Solid } from '../Solid.js';
 import type { SpatialBoundary } from '../SpatialBoundary.js';
 
-/** Test a boundary against each adjoining planar face, or once without a face. */
+/** Test each adjoining planar face (or once without a face); any truthy result selects the boundary. */
 export type BoundaryPredicate = (options: {
   /** Solid whose own topology is searched; child nodes are excluded. */
   solid: Solid;
@@ -10,7 +10,7 @@ export type BoundaryPredicate = (options: {
   face: Face | undefined;
   /** Original shared boundary object. */
   boundary: SpatialBoundary;
-}) => boolean;
+}) => unknown;
 
 /** An original boundary index/object, a planar face of the solid, or a predicate. */
 export type BoundarySelector = number | SpatialBoundary | Face | BoundaryPredicate;
@@ -28,9 +28,10 @@ export type BoundarySelector = number | SpatialBoundary | Face | BoundaryPredica
  * A match on any face includes the boundary. If there is no adjoining planar
  * face, it is called once with face: undefined, including curved-only joins.
  * All predicates run even when another selector already includes the boundary.
+ * Predicate results use ordinary JavaScript truthiness, as in an if condition.
  * @returns Original boundary objects, deduplicated by identity in first-match
  * order. A nonempty selection with no matches returns an empty array.
- * @throws {@link TypeError} if solid is invalid or a predicate returns a nonboolean.
+ * @throws {@link TypeError} if solid is invalid.
  * @throws {@link RangeError} if a selector, index, or topology object is invalid.
  * Predicate exceptions propagate unchanged; the helper does not modify geometry.
  * @example
@@ -69,7 +70,6 @@ export function searchBoundaries(options: Solid | {
       for (const boundary of solid.boundaries) {
         for (const face of adjoining.get(boundary) ?? [undefined]) {
           const match = selector({ solid, face, boundary });
-          if (typeof match !== 'boolean') throw new TypeError('Boundary predicates must return a boolean');
           if (match) selected.add(boundary);
         }
       }

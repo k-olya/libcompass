@@ -867,6 +867,7 @@ Shared defaults live in `src/defaults/` and are exported from the root:
 | `XZ` | Plane at the world origin, local axes +X / +Z | -Y |
 | `ZX` | Plane at the world origin, local axes +Z / +X | +Y |
 | `YZ` | Plane at the world origin, local axes +Y / +Z | +X |
+| `ZY` | Plane at the world origin, local axes +Z / +Y | -X |
 
 These are ready-to-use values. `X`, `Y`, `Z`, `negX`, `negY`, and `negZ` are unit
 `SpatialLine` instances with origin `[0, 0, 0]`, compatible with gl-matrix vec3

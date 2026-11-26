@@ -30,3 +30,9 @@ export const ZX = new Plane({ b: Z, c: X });
  * Treat this default plane and its coordinate arrays as immutable.
  */
 export const YZ = new Plane({ b: Y, c: Z });
+
+/**
+ * Shared {@link Plane} at the world origin with local axes +Z, +Y and normal -X.
+ * Treat this default plane and its coordinate arrays as immutable.
+ */
+export const ZY = new Plane({ b: Z, c: Y });

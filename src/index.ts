@@ -71,6 +71,6 @@ export { TrimmedSurface, trimmedSurface } from './TrimmedSurface.js';
 export { SurfaceRegion, surfaceRegion, type SurfaceTrim, type SurfaceRegionChart } from './SurfaceRegion.js';
 export { TRIANGULATION_RESOLUTION, setTriangulationResolution } from './triangulation.js';
 export { X, Y, Z, negX, negY, negZ } from './defaults/axes.js';
-export { XY, YX, XZ, ZX, YZ } from './defaults/planes.js';
+export { XY, YX, XZ, ZX, YZ, ZY } from './defaults/planes.js';
 export { center, origin } from './defaults/points.js';
 export { colors, type AnnotationColor } from './defaults/colors.js';

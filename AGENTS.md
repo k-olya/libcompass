@@ -22,7 +22,7 @@
   Defaults are instances or values, not constructor shorthands. Treat shared
   defaults and their coordinate arrays as immutable. Plane names specify local
   axis order: `XY` uses X/Y, `YX` uses Y/X, `XZ` uses X/Z, `ZX` uses Z/X,
-  and `YZ` uses Y/Z; normals follow local X cross local Y. `X`, `Y`, `Z`,
+  `YZ` uses Y/Z, and `ZY` uses Z/Y; normals follow local X cross local Y. `X`, `Y`, `Z`,
   `negX`, `negY`, and `negZ` are unit `SpatialLine` instances with zero origins;
   `negX`, `negY`, and `negZ` point along the corresponding negative world axes.
   SpatialLine is a vec3-compatible direction array with a copied origin;

@@ -2,7 +2,33 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as compass from 'libcompass';
 
-const { Circle, Edge, Face, Line, LineSegment, Plane, Sketch } = compass;
+const { Circle, Edge, Face, Line, LineSegment, Plane, Sketch, p } = compass;
+
+test('p copies XY coordinates from numbers, arrays and vertices', () => {
+  const array = Object.freeze([1, 2, 3, 4]);
+  const vertex = Object.freeze({ position: array });
+  for (const point of [p(1, 2), p([1, 2]), p(array), p(new Float32Array(array)), p(vertex)]) {
+    assert.deepEqual(point, { x: 1, y: 2 });
+  }
+  assert.notEqual(p(array), p(array));
+  assert.deepEqual(p([1, 2, NaN]), { x: 1, y: 2 });
+  const mutable = [3, 4, 5];
+  const point = p({ position: mutable });
+  mutable[0] = 9;
+  assert.deepEqual(point, { x: 3, y: 4 });
+  assert.deepEqual(new Circle({ center: p(array), radius: 1 }).at(0), { x: 2, y: 2 });
+});
+
+test('p rejects missing and invalid selected coordinates', () => {
+  for (const array of [[], [1], [undefined, Number], [NaN, 1], [1, Infinity], [1, -Infinity]]) {
+    assert.throws(() => p(array), RangeError);
+    assert.throws(() => p({ position: array }), RangeError);
+  }
+  for (const value of [undefined, NaN, Infinity, -Infinity]) {
+    assert.throws(() => p(value, 1), RangeError);
+    assert.throws(() => p(1, value), RangeError);
+  }
+});
 
 test('points and vertices are plain objects and geometry retains their identities', () => {
   assert.equal('Point' in compass, false);

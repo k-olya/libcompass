@@ -441,6 +441,10 @@ const body = s.extrude({ length: 10 });
 
 `Point` and `Vertex` have no runtime constructors. Use plain object literals and
 `import type { Point, Vertex } from 'libcompass'` for TypeScript annotations.
+The `p(x, y)`, `p(array)`, and `p(vertex)` helper forms create fresh `{ x, y }`
+points. Arrays (including typed arrays) may have any length of at least two;
+only their first two coordinates are used. Vertices supply world X/Y without
+plane projection. Missing or nonfinite X/Y coordinates throw a `RangeError`.
 Geometry operations validate finite coordinates when consuming those objects.
 Vertex objects and their position arrays are retained by reference; treat them
 as immutable so shared topology remains consistent.

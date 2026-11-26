@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  Circle, PlanarCurve, SpatialCurve, SpatialSurface, Face, Solid,
+  Circle, PlanarCurve, SpatialCurve, SpatialSurface, Face, Solid, Sketch,
   circle, planarCurve, spatialCurve, spatialSurface, face, solid, polyline, svgPath,
   sketch, rectangle, measure, annotate, chamfer, round, searchBoundaries,
   Plane, SpatialLine, Edge, RuledSurface, TrimmedSurface, SurfaceRegion, XY,
@@ -9,6 +9,22 @@ import {
 
 const sameMesh = (a,b) => assert.deepEqual(a.triangulate(),b.triangulate());
 const box = () => sketch().add(rectangle({ width: 4, height: 4 })).extrude(4);
+
+test('sketch constructors accept a Plane or Face directly with the same placement as options', () => {
+  const plane = new Plane({ a: [2, 3, 4], b: [2, 4, 4], c: [2, 3, 5] });
+  const face = box().surfaces[1];
+  for (const make of [sketch, value => new Sketch(value)]) {
+    for (const placement of [plane, face]) {
+      const direct = make(placement), wrapped = make({ plane: placement });
+      assert.equal(direct.plane, placement instanceof Face ? placement.plane : placement);
+      assert.equal(direct.plane, wrapped.plane);
+      assert.deepEqual(direct.elements, []);
+      sameMesh(direct.add(circle(1)).extrude(2), wrapped.add(circle(1)).extrude(2));
+    }
+    assert.notEqual(make().plane, make({}).plane);
+    assert.throws(() => make({ plane: {} }), TypeError);
+  }
+});
 
 test('approved constructor shorthands and constructors accept direct values and preserve options', () => {
   for (const make of [circle, value => new Circle(value)]) {

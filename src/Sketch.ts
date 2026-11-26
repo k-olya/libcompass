@@ -38,11 +38,13 @@ export class Sketch {
 
   /**
    * Create an empty sketch.
+   * Accepts a Plane or planar Face directly, or an options object containing plane.
    *
    * @param options - Optional Plane or planar Face; defaults to the world XY plane.
    * @throws {@link TypeError} if the placement is not a Plane or Face.
    */
-  constructor({ plane = new Plane() }: { plane?: Plane | Face } = {}) {
+  constructor(options: Plane | Face | { plane?: Plane | Face } = {}) {
+    const { plane = new Plane() } = options instanceof Plane || options instanceof Face ? { plane: options } : options;
     if (!(plane instanceof Plane) && !(plane instanceof Face)) throw new TypeError('A sketch plane must be a Plane or planar Face');
     this.plane = plane instanceof Face ? plane.plane : plane;
   }
@@ -134,13 +136,14 @@ export class Sketch {
 
 /**
  * Create an empty sketch.
+ * Accepts a Plane or planar Face directly, or an options object containing plane.
  *
  * Constructor shorthand for `new Sketch(options)`; returns a new {@link Sketch} instance.
  *
  * @param options - Optional Plane or planar Face; defaults to the world XY plane.
  * @throws {@link TypeError} if the placement is not a Plane or Face.
  */
-export function sketch(options?: {
+export function sketch(options?: Plane | Face | {
   /** Placement plane or planar Face; defaults to a new world XY plane. */
   plane?: Plane | Face;
 }): Sketch { return new Sketch(options); }

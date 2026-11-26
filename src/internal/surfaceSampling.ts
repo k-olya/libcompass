@@ -1,6 +1,7 @@
 import { vec3 } from 'gl-matrix';
 import type { Vertex } from '../Vertex.js';
 import { TRIANGULATION_RESOLUTION } from '../triangulation.js';
+import { sampleParameterTolerance } from './curveSamples.js';
 
 export type SurfaceGrid = { u: number[]; v: number[]; vertices: Vertex[][] };
 
@@ -8,7 +9,7 @@ export type SurfaceGrid = { u: number[]; v: number[]; vertices: Vertex[][] };
 export function sampleSurface(surface: { at(u: number, v: number): Vertex }, uSeeds: readonly number[] = [], vSeeds: readonly number[] = []): SurfaceGrid {
   if ([...uSeeds, ...vSeeds].some(t => !Number.isFinite(t) || t < 0 || t > 1)) throw new RangeError('Surface sample parameters must be in [0, 1]');
   // Reversing t twice can differ by a few ulps; those are one grid station.
-  const tolerance = 16 * Number.EPSILON;
+  const tolerance = sampleParameterTolerance;
   const sorted = (values: readonly number[]) => [0, 0.5, 1, ...values]
     .map(t => t < tolerance ? 0 : t > 1 - tolerance ? 1 : t).sort((a, b) => a - b)
     .filter((t, i, all) => !i || t - all[i - 1] > tolerance);

@@ -68,7 +68,9 @@ export class ParametricPatch {
       const at = (t: number): Point => axis === 'x' ? { x: value, y: t } : { x: t, y: value };
       const key = `${axis}:${periodic ? 0 : value}`;
       let boundary = seams.get(key);
-      if (!boundary) { boundary = new SpatialCurve({ at: t => this.at(at(t)) }); seams.set(key, boundary); }
+      // A collapsed chart side can evaluate to the same pole at every t.
+      // Analysis seams need distinct sample identities to retain their UV parameters.
+      if (!boundary) { boundary = new SpatialCurve({ at: t => ({ position: this.at(at(t)).position }) }); seams.set(key, boundary); }
       this.paths.push({ boundary, at, physical: false });
     }
     const grid = this.surface.sample();

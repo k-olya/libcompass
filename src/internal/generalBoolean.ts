@@ -17,6 +17,7 @@ import { ParametricPatch, type PatchPath } from './parametricPatch.js';
 import { patchArrangement, type ArrangementArc, type ArrangementRegion } from './patchArrangement.js';
 import { surfaceIntersections } from './surfaceIntersections.js';
 import { assembleFaces } from './trimFace.js';
+import { assembleBoundaryLoops } from './boundaryLoops.js';
 
 type Interval = { start: number; end: number };
 type Piece = Interval & { boundary: SpatialBoundary; parameter: (t: number) => number; local: (t: number) => number };
@@ -35,23 +36,8 @@ function intervals(arcs: readonly ArrangementArc[]): Map<SpatialBoundary, Interv
   return groups;
 }
 
-function loops(boundaries: readonly SpatialBoundary[]): SpatialBoundary[][] {
-  const remaining = new Set(boundaries), result: SpatialBoundary[][] = [];
-  while (remaining.size) {
-    const first = remaining.values().next().value!, loop = [first]; remaining.delete(first);
-    let vertex = first.end;
-    while (vertex !== first.start) {
-      const adjacent = [...remaining].filter(boundary => boundary.start === vertex || boundary.end === vertex);
-      if (adjacent.length !== 1) throw new RangeError('Boolean trims cannot be sewn into manifold boundary loops');
-      const next = adjacent[0]; remaining.delete(next); loop.push(next); vertex = next.start === vertex ? next.end : next.start;
-    }
-    result.push(loop);
-  }
-  return result;
-}
-
 /** General B-rep partitioning. Meshes discover/classify; retained curves and surfaces remain evaluators. */
-export function generalBoolean(solid: Solid, tool: Solid, operation: 'intersect' | 'difference', a: BooleanMesh, b: BooleanMesh, tolerance: number): Surface[] {
+export function generalBoolean(solid: Solid, tool: Solid, operation: 'intersect' | 'difference' | 'union', a: BooleanMesh, b: BooleanMesh, tolerance: number): Surface[] {
   const sourceBounds = [...solid.surfaces, ...tool.surfaces].flatMap(source => {
     const surface = source instanceof SurfaceRegion ? source.surface : source;
     if (!(surface instanceof SpatialSurface)) return [];
@@ -100,6 +86,7 @@ export function generalBoolean(solid: Solid, tool: Solid, operation: 'intersect'
     }
   }
   const retained: { patch: ParametricPatch; regions: ArrangementRegion[]; intervals: Map<SpatialBoundary, Interval[]>; reverse: boolean }[] = [];
+  const junctions: { boundary: SpatialBoundary; t: number }[] = [];
   const coincidentNormal = (patch: ParametricPatch, point: ReadonlyVec3, normal: ReadonlyVec3): ReadonlyVec3 | undefined => {
     if (patch.source instanceof Face && (Math.abs(vec3.dot(patch.source.plane.normal, normal)) < 1 - 1e-9 || Math.abs(vec3.dot(vec3.subtract([0, 0, 0], point, patch.source.plane.origin), patch.source.plane.normal)) > tolerance)) return;
     const uv = patch.project(point);
@@ -117,15 +104,17 @@ export function generalBoolean(solid: Solid, tool: Solid, operation: 'intersect'
       const coincident = (isLeft ? right : left).map(candidate => coincidentNormal(candidate, point, normal)).find(normal => normal !== undefined);
       if (coincident) {
         const same = vec3.dot(coincident, normal) > 0;
-        return operation === 'intersect' ? isLeft && same : isLeft && !same;
+        return operation === 'difference' ? isLeft && !same : isLeft && same;
       }
-      const inside = analysis.contains(point); return operation === 'intersect' || !isLeft ? inside : !inside;
+      const inside = analysis.contains(point); return operation === 'union' ? !inside : operation === 'intersect' || !isLeft ? inside : !inside;
     }));
+    for (const junction of arrangement.junctions(selected)) junctions.push(junction);
     if (selected.size) retained.push({ patch, regions: [...selected], intervals: intervals(arrangement.boundary(selected)), reverse: operation === 'difference' && !isLeft });
   }
   // Split each shared curve only at real topological events, not at discovery samples or chart seams.
   const cuts = new Map<SpatialBoundary, number[]>();
   for (const patch of retained) for (const [curve, ranges] of patch.intervals) cuts.set(curve, [...cuts.get(curve) ?? [], ...ranges.flatMap(range => [range.start, range.end])]);
+  for (const { boundary, t } of junctions) if (cuts.has(boundary)) cuts.get(boundary)!.push(t);
   const requested = new Map<SpatialBoundary, number[]>();
   for (const patch of retained) for (const region of patch.regions) for (const arc of [region.outer, ...region.holes].flat()) {
     const curve = arc.path.boundary;
@@ -186,8 +175,18 @@ export function generalBoolean(solid: Solid, tool: Solid, operation: 'intersect'
     if (patch.source instanceof Face) {
       const frame = patch.source.plane;
       const plane = reverse ? new Plane({ a: frame.origin, b: vec3.add([0, 0, 0], frame.origin, frame.xAxis), c: vec3.subtract([0, 0, 0], frame.origin, frame.yAxis) }) : frame;
-      try { return assembleFaces(boundaries, new Face({ outer: patch.source.outer, holes: patch.source.holes, plane })); }
-      catch (cause) { throw new RangeError('Boolean could not assemble exact retained planar boundaries', { cause }); }
+      const face = new Face({ outer: patch.source.outer, holes: patch.source.holes, plane });
+      // Separate arrangement regions can meet at a tangent vertex. Assemble
+      // each region independently instead of treating that contact as a hole.
+      try { return assembleFaces(boundaries, face); }
+      catch {
+        try { return regions.flatMap(region => {
+          const edges = [region.outer, ...region.holes].flatMap(loop => loop.flatMap(arc =>
+            (pieces.get(arc.path.boundary) ?? []).filter(piece => piece.start < arc.end - 1e-10 && piece.end > arc.start + 1e-10).map(piece => piece.boundary)));
+          return assembleFaces([...new Set(edges)], face);
+        }); }
+        catch (cause) { throw new RangeError('Boolean could not assemble exact retained planar boundaries', { cause }); }
+      }
     }
     const trims = (arcs: ArrangementArc[]): SurfaceTrim[] => arcs.flatMap(arc => {
       const list = pieces.get(arc.path.boundary) ?? [], result: SurfaceTrim[] = [];
@@ -203,7 +202,7 @@ export function generalBoolean(solid: Solid, tool: Solid, operation: 'intersect'
       }
       return arc.reversed ? result.reverse() : result;
     });
-    return [new SurfaceRegion({ surface: patch.surface, boundaryLoops: loops(boundaries), reversed: reverse ? !patch.reversed : patch.reversed,
+    return [new SurfaceRegion({ surface: patch.surface, boundaryLoops: assembleBoundaryLoops(boundaries), reversed: reverse ? !patch.reversed : patch.reversed,
       regions: regions.map(region => ({ outer: trims(region.outer), holes: region.holes.map(trims) })) })];
   });
 }

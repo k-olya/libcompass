@@ -90,6 +90,17 @@ export class SurfaceIntersection extends SpatialCurve {
       throw new RangeError('Surface intersection refinement did not converge');
     };
     stations = stations.map(refine);
+    // At a pole, one chart coordinate is arbitrary. Use the limiting value
+    // from this branch rather than the discovery triangle's arbitrary longitude.
+    for (const index of [0, stations.length - 1]) {
+      const neighbor = stations[index === 0 ? 1 : index - 1];
+      for (const [patch, offset] of [[a, 0], [b, 2]] as const) {
+        const q = stations[index], uv = { x: q[offset], y: q[offset + 1] };
+        if (!patch.surface.poles.some(pole => vec3.distance(pole.position, patch.at(uv).position) <= tolerance)) continue;
+        const derivatives = patch.derivatives(uv), lengths = derivatives.map(vec3.length);
+        for (let axis = 0; axis < 2; axis++) if (lengths[axis] <= Math.max(...lengths) * 1e-8) q[offset + axis] = neighbor[offset + axis];
+      }
+    }
     const lengths = [0];
     for (let i = 1; i < stations.length; i++) {
       const [first, last] = [stations[i - 1], stations[i]].map(q => a.at({ x: q[0], y: q[1] }).position);
@@ -169,21 +180,22 @@ export function surfaceIntersections(a: ParametricPatch, b: ParametricPatch, tol
   }
   if (nodes.some(node => node.edges.size > 2)) throw new RangeError('Surface intersection branches or has unresolved tangency');
   const unused = new Set(edges.map((_, i) => i)), output: SurfaceIntersection[] = [];
+  const atPole = (index: number) => [...a.surface.poles, ...b.surface.poles].some(pole => vec3.distance(pole.position, nodes[index].point) <= tolerance);
   while (unused.size) {
     const firstEdge = unused.values().next().value!;
     let first = edges[firstEdge][0];
     // Find an endpoint before tracing an open component.
     const seen = new Set<number>(); let cursor = first;
-    while (nodes[cursor].edges.size === 2 && !seen.has(cursor)) {
+    while (nodes[cursor].edges.size === 2 && !atPole(cursor) && !seen.has(cursor)) {
       seen.add(cursor); const next = [...nodes[cursor].edges].map(i => edges[i].find(n => n !== cursor)!).find(n => !seen.has(n));
       if (next === undefined) break; cursor = next;
     }
-    if (nodes[cursor].edges.size === 1) first = cursor;
+    if (nodes[cursor].edges.size === 1 || atPole(cursor)) first = cursor;
     const stations = [nodes[first].uv]; cursor = first;
     while (true) {
       const edge = [...nodes[cursor].edges].find(i => unused.has(i)); if (edge === undefined) break;
       unused.delete(edge); cursor = edges[edge].find(n => n !== cursor)!; stations.push(nodes[cursor].uv);
-      if (cursor === first) break;
+      if (cursor === first || atPole(cursor)) break;
     }
     if (stations.length > 1) {
       const curve = new SurfaceIntersection(a, b, stations.map(q => [...q]), cursor === first, tolerance);

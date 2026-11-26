@@ -4,6 +4,22 @@ import type { Tessellation } from './Tessellation.js';
 
 export const samePosition = (a: Vertex, b: Vertex): boolean => Array.from(a.position).every((value, i) => value === b.position[i]);
 
+/** Assemble closed loops from shared boundary identities; reject branching joins. */
+export function assembleBoundaryLoops(boundaries: readonly SpatialBoundary[]): SpatialBoundary[][] {
+  const remaining = new Set(boundaries), result: SpatialBoundary[][] = [];
+  while (remaining.size) {
+    const first = remaining.values().next().value!, loop = [first]; remaining.delete(first);
+    let vertex = first.end;
+    while (vertex !== first.start) {
+      const adjacent = [...remaining].filter(boundary => boundary.start === vertex || boundary.end === vertex);
+      if (adjacent.length !== 1) throw new RangeError('Boolean trims cannot be sewn into manifold boundary loops');
+      const next = adjacent[0]; remaining.delete(next); loop.push(next); vertex = next.start === vertex ? next.end : next.start;
+    }
+    result.push(loop);
+  }
+  return result;
+}
+
 /** Orient shared boundary objects along an ordered, closed trim loop. */
 export function orientLoop(loop: readonly SpatialBoundary[]): { boundary: SpatialBoundary; reversed: boolean }[] {
   if (!loop.length) throw new RangeError('A surface needs a closed boundary');

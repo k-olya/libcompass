@@ -353,16 +353,24 @@ Oscillations hidden between supplied samples cannot be certified.
 
 `intersect({ solid, tool })` retains the two solids' common volume, while
 `difference({ solid, tool })` removes the tool's volume from the first solid.
-Instance forms are `part.intersect({ tool })` and `part.difference({ tool })`.
+`union({ solid, tool })` unites both operands' material.
+Instance forms are `part.intersect({ tool })`, `part.difference({ tool })`, and
+`part.union({ tool })`; each also accepts the tool solid directly.
 Each returns a new `Solid`, leaving both operands' topology, coordinates and
 memoized triangulations unchanged. Only the operands' own surfaces participate;
 the first operand's child nodes are retained unchanged in a fresh child array.
 An empty result has `surfaces: []`. Face/edge/point-only contact has no shared
 volume: intersection is empty and difference retains the original volume.
+Union sews face contacts, removes internal faces, and unites coplanar patches,
+collinear edges, and smooth curve/surface runs while retaining exact equations
+and source sampling overrides. Edge-only or point-only contacts that would
+create nonmanifold geometry throw. Disjoint parts remain separate closed
+components of one `Solid`, usable together in later booleans and transforms.
 
 ```ts
 const common = intersect({ solid: part, tool: cutter });
 const remaining = part.difference({ tool: cutter });
+const combined = part.union({ tool: extension });
 scene.add(remaining);
 ```
 

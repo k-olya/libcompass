@@ -6,6 +6,7 @@ import { round } from './operations/round.js';
 import { chamfer } from './operations/chamfer.js';
 import { intersect } from './operations/intersect.js';
 import { difference } from './operations/difference.js';
+import { union } from './operations/union.js';
 import { extrudeCut } from './operations/extrudeCut.js';
 import type { ReadonlyVec3 } from 'gl-matrix';
 import type { Sketch } from './Sketch.js';
@@ -148,6 +149,19 @@ export class Solid extends Memo {
     /** Cutting solid; never mutated. */
     tool: Solid;
   }): Solid { return difference({ solid: this, tool: options instanceof Solid ? options : options.tool }); }
+
+  /**
+   * Unite this solid with the tool, preserving disconnected components as one solid.
+   * Accepts a tool solid directly, or an options object containing tool.
+   * @param options.tool - Second solid; child nodes do not participate in geometry.
+   * @returns A new solid retaining this solid's children in a fresh child array.
+   * @throws {@link RangeError} for invalid inputs or nonmanifold/unresolved results.
+   * @see {@link union}
+   */
+  union(options: Solid | {
+    /** Solid whose material is added; never mutated. */
+    tool: Solid;
+  }): Solid { return union({ solid: this, tool: options instanceof Solid ? options : options.tool }); }
 
   /**
    * Extrude a sketch and subtract it from this solid without modifying either.

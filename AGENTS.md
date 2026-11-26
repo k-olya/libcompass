@@ -206,7 +206,12 @@
   substitute a mesh or silently discard an unsupported component. Trimming an
   individual surface does not cap it or turn it into a closed solid.
 - Solid booleans are regularized, nonmutating operations: `intersect` retains
-  shared volume; `difference` removes the tool volume. Inputs must have closed,
+  shared volume; `difference` removes the tool volume; `union` unites material,
+  including disconnected components in one Solid. Union removes internal faces,
+  unites coplanar patches, and joins collinear edges and tangent curve/surface
+  runs while preserving native charts, sampling overrides and sharp joins.
+  Face contact can unite material; edge/point-only nonmanifold contacts throw.
+  Inputs must have closed,
   consistently oriented manifold own surfaces; child nodes are excluded from
   geometry and the first operand's children are retained in a fresh child array.
   Empty results use `new Solid({ surfaces: [] })`. `extrudeCut` is exactly

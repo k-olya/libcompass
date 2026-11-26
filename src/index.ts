@@ -49,6 +49,7 @@ export { trimCurve } from './operations/trimCurve.js';
 export { trimSurface } from './operations/trimSurface.js';
 export { intersect } from './operations/intersect.js';
 export { difference } from './operations/difference.js';
+export { union } from './operations/union.js';
 export { extrudeCut } from './operations/extrudeCut.js';
 export type { SpatialBoundary } from './SpatialBoundary.js';
 export { SpatialCurve, spatialCurve } from './SpatialCurve.js';

@@ -1,6 +1,9 @@
 /** Parameters travel with evaluated point identities without changing public point shapes. */
 const parameters = new WeakMap<object, WeakMap<object, number>>();
 
+/** Normalized-parameter roundoff through composed charts, trims and reversals. */
+export const sampleParameterTolerance = 4096 * Number.EPSILON;
+
 export function rememberSample<T extends object>(curve: object, point: T, t: number): T {
   let samples = parameters.get(curve);
   if (!samples) parameters.set(curve, samples = new WeakMap());

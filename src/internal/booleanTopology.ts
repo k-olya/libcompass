@@ -104,7 +104,11 @@ export function booleanTopology(patches: readonly BooleanPatch[], tolerance: num
       output.push(new RuledSurface({ start, end, sides: sides.u0 ? [sides.u1 as Edge, sides.u0 as Edge] : undefined, reversed }));
     } else output.push(new TrimmedSurface({ surface, at: (u, v) => ({ x: u, y: v }), sides, boundaryLoops: loops, reversed }));
   }
-  // Remove duplicate coplanar patches before cancelling interior subdivision edges.
+  return mergeCoplanarFaces(output, tolerance);
+}
+
+/** Remove duplicate planar patches and cancel shared interior subdivisions. */
+export function mergeCoplanarFaces(output: readonly Surface[], tolerance: number): Surface[] {
   const boundaryIds = new Map<SpatialBoundary, number>();
   const id = (boundary: SpatialBoundary) => {
     if (!boundaryIds.has(boundary)) boundaryIds.set(boundary, boundaryIds.size);
@@ -120,10 +124,24 @@ export function booleanTopology(patches: readonly BooleanPatch[], tolerance: num
     if (!group.some(face => face.boundaries.map(id).sort((a, b) => a - b).join(',') === key)) group.push(surface);
   }
   return [...groups.flatMap(group => {
-    if (group.length === 1) return group;
-    const counts = new Map<SpatialBoundary, number>();
-    for (const face of group) for (const boundary of face.boundaries) counts.set(boundary, (counts.get(boundary) ?? 0) + 1);
-    if ([...counts.values()].some(count => count > 2)) throw new RangeError('Boolean has overlapping coplanar regions');
-    return assembleFaces([...counts].filter(([, count]) => count === 1).map(([boundary]) => boundary), group[0]);
+    // Coplanar components meeting only at a vertex remain separate faces.
+    // Only shared edges connect regions that can be merged into one contour.
+    const remaining = new Set(group), components: Face[][] = [];
+    while (remaining.size) {
+      const component = [remaining.values().next().value!]; remaining.delete(component[0]);
+      for (let i = 0; i < component.length; i++) for (const candidate of remaining) {
+        if (candidate.boundaries.some(boundary => component[i].boundaries.includes(boundary))) {
+          component.push(candidate); remaining.delete(candidate);
+        }
+      }
+      components.push(component);
+    }
+    return components.flatMap(group => {
+      if (group.length === 1) return group;
+      const counts = new Map<SpatialBoundary, number>();
+      for (const face of group) for (const boundary of face.boundaries) counts.set(boundary, (counts.get(boundary) ?? 0) + 1);
+      if ([...counts.values()].some(count => count > 2)) throw new RangeError('Boolean has overlapping coplanar regions');
+      return assembleFaces([...counts].filter(([, count]) => count === 1).map(([boundary]) => boundary), group[0]);
+    });
   }), ...spatial];
 }

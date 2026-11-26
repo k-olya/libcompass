@@ -19,6 +19,7 @@ const within = (p: Point, a: Point, b: Point) => p.x >= Math.min(a.x, b.x) - 1e-
 /** Polygonal discovery, exact UV root refinement, then a planar half-edge arrangement. */
 export function patchArrangement(patch: ParametricPatch, additional: readonly PatchPath[]): {
   regions: ArrangementRegion[]; boundary: (selected: ReadonlySet<ArrangementRegion>) => ArrangementArc[];
+  junctions: (selected: ReadonlySet<ArrangementRegion>) => { boundary: PatchPath['boundary']; t: number }[];
 } {
   const paths: Path[] = [];
   for (const path of [...patch.paths, ...additional]) {
@@ -104,7 +105,9 @@ export function patchArrangement(patch: ParametricPatch, additional: readonly Pa
   }
   for (let i = halves.length - 1; i >= 0; i--) if (discarded.has(halves[i])) halves.splice(i, 1);
   const angleRAD = (half: Half): number => {
-    const t = half.reversed ? half.end : half.start, next = half.path.at(t + (half.reversed ? -1 : 1) * Math.min((half.end - half.start) / 10, 1e-5));
+    // A microscopic probe loses the curvature ordering at tangent contacts to
+    // intersection-refinement roundoff. Use the interior of this sampled arc.
+    const next = half.path.at((half.start + half.end) / 2);
     return Math.atan2(next.y - half.from.point.y, next.x - half.from.point.x);
   };
   for (const node of nodes) node.outgoing.sort((a, b) => angleRAD(a) - angleRAD(b));
@@ -166,6 +169,14 @@ export function patchArrangement(patch: ParametricPatch, additional: readonly Pa
   }
   // Across a periodic seam, the adjacent region lives on the opposite chart
   // edge. A discovered cut lying on that seam is internal when both are kept.
-  return { regions, boundary: selected => halves.filter(half => half.path.physical && half.region && selected.has(half.region)
-    && ![half.twin, seamTwins.get(half)].some(twin => twin?.region && selected.has(twin.region))) };
+  const boundary = (selected: ReadonlySet<ArrangementRegion>) => halves.filter(half => half.path.physical && half.region && selected.has(half.region)
+    && ![half.twin, seamTwins.get(half)].some(twin => twin?.region && selected.has(twin.region)));
+  return { regions, boundary, junctions: selected => {
+    const retained = new Set(boundary(selected));
+    return nodes.flatMap(node => {
+      const physical = node.outgoing.filter(half => retained.has(half) || retained.has(half.twin));
+      return physical.length > 2 && new Set(physical.map(half => half.path.boundary)).size > 1
+        ? physical.map(half => ({ boundary: half.path.boundary, t: half.reversed ? half.end : half.start })) : [];
+    });
+  } };
 }

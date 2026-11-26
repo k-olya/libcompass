@@ -1,10 +1,8 @@
-import { parameterizedSamples } from './curveSamples.js';
+import { parameterizedSamples, sampleParameterTolerance as parameterTolerance } from './curveSamples.js';
 import type { SpatialBoundary } from '../SpatialBoundary.js';
 import type { Vertex } from '../Vertex.js';
 
 type Group = { members: Map<SpatialBoundary, boolean>; symmetric: boolean };
-// Leave room for roundoff from repeated direction reversals and trim reparameterization.
-const parameterTolerance = 256 * Number.EPSILON;
 
 /** Per-mesh shared subdivision and vertex storage; never changes analytic topology. */
 export class Tessellation {

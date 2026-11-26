@@ -81,7 +81,7 @@ export class Face extends Surface {
       for (let i = 0; i < triangles.length; i += 3) [triangles[i + 1], triangles[i + 2]] = [triangles[i + 2], triangles[i + 1]];
     }
     const uv = polygons.flat();
-    legalizeTriangles(triangles, points.map((point, i) => ({ point, uv: uv[i] })));
+    legalizeTriangles(triangles, points.map((point, i) => ({ point, uv: uv[i] })), [1, 0, 1], 'float32');
     const positions = new Float32Array(triangles.length * 3);
     let offset = 0;
     for (let i = 0; i < triangles.length; i += 3) {

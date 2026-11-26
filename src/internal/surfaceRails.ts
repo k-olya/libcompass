@@ -39,15 +39,17 @@ export class SurfaceRail extends SpatialCurve {
   }
 }
 
-export function boundaryPlacement(surface: ParametricFace, boundary: SpatialBoundary) {
+export function boundaryPlacement(surface: ParametricFace, boundary: SpatialBoundary, faceAreas?: Map<readonly SpatialBoundary[], number>) {
   if (surface instanceof Face) {
     const loop = surface.boundaryLoops.find(loop => loop.includes(boundary));
     if (!loop) throw new RangeError('Boundary does not belong to the face');
     const pieces = orientLoop(loop), reversed = pieces.find(piece => piece.boundary === boundary)!.reversed;
-    const area = signedArea(pieces.flatMap(piece => {
+    let area = faceAreas?.get(loop);
+    if (area === undefined) area = signedArea(pieces.flatMap(piece => {
       const points = piece.boundary.sample();
       return (piece.reversed ? [...points].reverse() : points).slice(0, -1).map(point => surface.plane.toLocal(point));
     }));
+    faceAreas?.set(loop, area);
     const sign = Math.sign(area) * (surface.holes.includes(loop) ? -1 : 1) * (reversed ? -1 : 1);
     return { uv: (t: number) => surface.plane.toLocal(boundary.at(t)),
       inward: (_uv: Point, tangent: ReadonlyVec3) => vec3.scale([0, 0, 0],

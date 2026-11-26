@@ -194,6 +194,21 @@
   including oblique planar cuts; retain unrelated trims and original source charts.
   Reject unsupported corners, overlaps and unresolved
   intersections explicitly rather than substituting faceted geometry.
+- Chamfer and round share contact solving, strip/end intersections and native-chart
+  trimming in the blend engine. Index incidence once per surface set; keep planar
+  bevel arrangements local instead of clipping whole solids. Two selected planar
+  round strips with equal support angles share their exact cylindrical intersection.
+  Three selected boundaries on three regular planar/curved supports solve a shared
+  tangent ball in the original charts, with exact spherical corner patches.
+  Isolated strips can end on regular curved surfaces, retaining source charts and
+  partial neighbor trims. Connected numerical strips share exact intersection
+  curves. Two-strip junctions may end on unequal contact rails: close the remaining
+  portion against the adjoining support and retain its native chart. Three chamfer
+  strips share pairwise seams meeting at one common vertex. Preserve distinct seam
+  boundaries in SurfaceRegion charts rather than inventing a single boundary shared
+  by three surfaces. Reuse validated own meshes on the result, separately from
+  child memo caches; `refresh()` discards them and resolution changes before first
+  triangulation must resample. Never retry an invalid or overlapping result.
 - Geometric trims take cutting geometry, not parameter ranges: `trimCurve`
   retains the interval containing an original normalized `keep` parameter;
   `trimSurface` returns connected retained surface patches, selecting a plane's

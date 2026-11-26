@@ -197,8 +197,9 @@ const beveled = chamfer({ solid: part, boundaries: [0, 2], length: 0.5, angle: 4
 scene.add(beveled); // The original part and its cached mesh are unchanged.
 ```
 
-Convex straight edges between planar faces use analytic cutting planes, including
-intersections where several bevels meet. Smooth closed curved rims are evaluated
+Straight edges between planar faces use local analytic plane arrangements, including
+concave edges and intersections where several bevels meet. Cuts affect the edge's
+neighborhood and preserve remote surfaces and disconnected components. Curved rims are evaluated
 generically: the adjoining mathematical surfaces are trimmed and joined by a
 ruled bevel, including outer rims and holes on drafted extrusions. Smooth rims
 may combine tangent line segments and curves. Convex bevels remove material;
@@ -206,8 +207,10 @@ concave bevels add it, including around the floor of a blind pocket. A face
 selector can bevel the pocket's outer lip, inner lip and floor together. No circle
 equations or faceted replacement solids are used. Input surfaces, boundaries,
 vertices and coordinate arrays are not modified; child nodes are retained in a
-new child array. Open curved corners, nonconvex straight corners, overlaps with
-holes or unrelated curved surfaces, folds and unresolved intersections throw.
+new child array. Open curved strips intersect their planar or curved end surfaces,
+sharing exact closing boundaries and retaining native source charts. General
+mixed corner arrangements, overlaps with holes or unrelated surfaces, folds and
+unresolved intersections throw.
 Validation uses a temporary mesh at the current resolution, with the same
 numerical limitations as sweep validation. A smooth solid with no physical
 boundaries, such as a torus, returns a new solid with its existing surfaces.
@@ -267,7 +270,10 @@ const torus = round({ solid: tube, radius: 1 });
 ```
 
 The analytic planar-edge solver requires only its affected edge/corner neighborhoods to be
-planar, with one or three selected edges at each affected three-face corner.
+planar, with one, two or three selected edges at each affected three-face corner.
+Two-edge junctions with equal support angles use a shared exact cylinder-intersection
+curve. Three-edge junctions use spherical corner patches. Oblique planar ends
+are intersected analytically.
 Unrelated curved surfaces and distant hole boundaries are preserved by identity;
 affected planar faces are trimmed while retaining their holes. The rest of the
 solid can be nonconvex. A single call can round both the outside of a rectangular
@@ -277,19 +283,40 @@ Smooth closed rims require regular adjoining surface charts, including convex
 lips and concave floors of blind pockets.
 Unsupported analytic configurations retry a numerical surface-offset solver on
 the original solid. It supports open straight/curved boundaries between regular
-planar or spatial surfaces, with planar end caps and one selected boundary per
-endpoint. The solver trims neighboring boundaries and shares closing arcs with
+planar or spatial surfaces, with regular planar or curved end caps. The solver
+trims neighboring boundaries and shares closing arcs with
 the caps. Oblique planar end caps are intersected with the blend when its source
 charts cover the required stations; straight edges between planar faces can use
 extended stations. Open rims can converge too: rounding both semicircular rims
 of a half-cylinder at its limiting radius produces a hemisphere and its flat cap.
 Convex and concave analytic three-edge corners use inward and outward offsets,
-respectively. Mixed convex/concave multi-edge junctions, two-edge corner junctions,
-curved end caps, insufficient source charts, overlaps and unresolved intersections
+respectively. Mixed convex/concave three-edge round junctions, higher-valence
+corners, insufficient source charts,
+overlaps and unresolved intersections
 still throw explicitly. Invalid radii and geometry do not trigger an unconditional
 retry. Geometry
 is checked for shared manifold topology and a closed, consistently oriented,
 non-self-intersecting sampled mesh before the result is returned.
+
+Three selected boundaries at a regular three-surface corner can also be rounded
+when the supports are curved: their radius-offset surfaces are solved together
+for a common tangent ball. The three blend strips meet that ball at shared
+contact curves, retaining the original surface equations and source charts.
+
+Connected chamfers and rounds also intersect their exact strips at two-edge
+junctions, including unequal support angles. If one strip reaches its contact
+rail first, the remaining end intersects the adjoining support and trims that
+support in its original chart. Three chamfer strips meet along shared pairwise
+intersections ending at one common point. These intersections remain mathematical
+curves; tessellation does not replace the blend or source surfaces.
+
+Chamfer and round share contact solving, end intersections, chart trimming and
+sewing. Solves retain source sampling overrides and use continuation and a damped
+Newton step for curved radius offsets. The validated mesh is reused on first
+triangulation, keeping child geometry separate; `refresh()` discards it, and a
+resolution change before first triangulation requests a new mesh. No exporter or
+geometry-kernel dependencies are added. Run `npm run bench:blends` for construction
+and first-render timings at resolution `0.001`.
 
 A shared boundary can run forward on one spatial surface and backward on the
 other. Tessellation maps both sample parameters and vertex order to each surface's

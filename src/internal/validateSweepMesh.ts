@@ -97,7 +97,11 @@ function intersect(a: Triangle, b: Triangle, epsilon: number): boolean {
   }
   const normal = (triangle: Triangle) => vec3.normalize([0, 0, 0], cross(sub(triangle.points[1], triangle.points[0]), sub(triangle.points[2], triangle.points[0])));
   const na = normal(a), nb = normal(b);
-  const distances = (triangle: Triangle, plane: Triangle, n: ReadonlyVec3) => triangle.points.map(p => vec3.dot(sub(p, plane.points[0]), n));
+  // Shared vertices lie exactly on either triangle's plane. A roundoff-sized
+  // signed distance there creates a spurious edge crossing near that vertex,
+  // especially when a long, thin facet is almost coplanar with its neighbor.
+  const distances = (triangle: Triangle, plane: Triangle, n: ReadonlyVec3) => triangle.points.map((p, i) =>
+    plane.ids.includes(triangle.ids[i]) ? 0 : vec3.dot(sub(p, plane.points[0]), n));
   const da = distances(a, b, nb), db = distances(b, a, na);
   const oneSide = (values: number[]) => values.every(x => x > epsilon) || values.every(x => x < -epsilon);
   if (oneSide(da) || oneSide(db)) return false;

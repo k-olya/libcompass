@@ -16,6 +16,7 @@ import type { Vertex } from './Vertex.js';
 import { rigidCopies } from './internal/rigidContext.js';
 import { TransformMat4 } from './TransformMat4.js';
 import type { BoundarySelector } from './operations/searchBoundaries.js';
+import { forgetSolidMesh, solidMesh } from './internal/solidMesh.js';
 
 /**
  * A memoized scene node retaining exact planar and spatial surfaces.
@@ -185,8 +186,11 @@ export class Solid extends Memo {
     angle?: number;
   }): Solid { return extrudeCut({ ...options, solid: this }); }
 
+  /** Invalidate both memoized triangles and any mesh retained during operation validation. */
+  override refresh(): void { forgetSolidMesh(this); super.refresh(); }
+
   protected override triangulateUncached(): Float32Array {
-    const own = Surface.triangulateAll(this.surfaces), children = super.triangulateUncached();
+    const own = solidMesh(this) ?? Surface.triangulateAll(this.surfaces), children = super.triangulateUncached();
     const positions = new Float32Array(own.length + children.length);
     positions.set(own); positions.set(children, own.length);
     return positions;

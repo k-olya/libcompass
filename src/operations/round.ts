@@ -7,6 +7,8 @@ import { RoundTopology } from '../internal/roundTopology.js';
 import { validateSweepMesh } from '../internal/validateSweepMesh.js';
 import { searchBoundaries, type BoundarySelector } from './searchBoundaries.js';
 import { UnsupportedRoundError } from '../internal/roundUnsupported.js';
+import { SurfaceGraph } from '../internal/surfaceGraph.js';
+import { retainSolidMesh } from '../internal/solidMesh.js';
 
 /**
  * Return a new solid with constant-radius tangent rounds on selected boundaries.
@@ -25,16 +27,23 @@ import { UnsupportedRoundError } from '../internal/roundUnsupported.js';
  * boundaries and splitting the remaining planar face into disconnected patches.
  * Convex and concave edges between planar faces and smooth curved rims are supported.
  * Planar-edge rounds preserve unrelated curved surfaces and distant hole trims;
- * both kinds of round can be selected together on the same solid. Only the affected
- * edge/corner neighborhood must be planar. Interference with other trims throws.
+ * both kinds of round can be selected together on the same solid. The numerical
+ * solver also handles regular curved corner supports. Interference with other trims throws.
  * Rims may combine tangent straight and curved sections, including pocket lips and floors.
  * Closed, noncollapsing rims on boolean-trimmed surface regions are supported,
  * including oblique planar cuts; source equations and unrelated trims are retained.
  * Unsupported analytic configurations retry the numerical surface-offset solver,
  * including open boundaries between planar/curved surfaces with planar end caps.
- * Oblique planar ends are intersected with the blend when source charts permit it.
- * Mixed convex/concave multi-edge junctions, two-edge corner junctions, curved end
- * caps and unresolved offset intersections still throw. Invalid geometry never
+ * Planar strips intersect oblique end planes analytically. Two selected edges at
+ * an equal-support-angle planar corner meet along a shared exact cylindrical
+ * intersection. Isolated numerical strips may end on regular curved surfaces,
+ * retaining the cap's native chart and sharing their closing curves.
+ * Three selected boundaries on three regular supports can solve one common
+ * tangent ball and share a spherical corner, including curved support surfaces.
+ * Two selected strips meet along their exact intersection, including unequal
+ * support angles; a remaining end portion intersects the adjoining support.
+ * Mixed convex/concave three-edge junctions, higher-valence corners,
+ * insufficient source charts and unresolved offset intersections still throw. Invalid geometry never
  * triggers an unconditional fallback.
  * @returns A new solid retaining the input child nodes in a fresh child array.
  * @throws {@link RangeError} for invalid radii/indices or unsupported, oversized or unresolved rounds.
@@ -56,9 +65,7 @@ export function round(options: Solid | {
   if (!(solid instanceof Solid)) throw new TypeError('Round requires a Solid');
   if (!Number.isFinite(radius) || radius <= 0) throw new RangeError('Round radius must be finite and positive');
   const selected = searchBoundaries({ solid, boundaries });
-  for (const boundary of solid.boundaries) if (solid.surfaces.filter(surface => surface.boundaries.includes(boundary)).length !== 2) {
-    throw new RangeError('Round requires a closed manifold solid with two surfaces per boundary');
-  }
+  new SurfaceGraph(solid.surfaces).validate('Round');
   if (!selected.length) return new Solid({ surfaces: solid.surfaces }).add(solid.children);
   let topology = new RoundTopology(radius, solid.vertices);
   const straight = selected.filter(boundary => boundary instanceof Edge);
@@ -76,10 +83,11 @@ export function round(options: Solid | {
     }
   }
   const result = new Solid({ surfaces });
-  for (const boundary of result.boundaries) if (surfaces.filter(surface => surface.boundaries.includes(boundary)).length !== 2) {
-    throw new RangeError('Round contact trims could not be sewn into shared manifold topology');
+  new SurfaceGraph(surfaces).validate('Round result');
+  try {
+    const positions = Surface.triangulateAll(surfaces);
+    validateSweepMesh(positions); retainSolidMesh(result, positions);
   }
-  try { validateSweepMesh(Surface.triangulateAll(surfaces)); }
   catch (cause) { throw new RangeError(`Round validation failed: ${cause instanceof Error ? cause.message.replaceAll('Sweep', 'Solid') : cause}`, { cause }); }
   return result.add(solid.children);
 }

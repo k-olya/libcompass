@@ -2,16 +2,16 @@ import type { Point } from '../Point.js';
 import type { Vertex } from '../Vertex.js';
 import { vec3 } from 'gl-matrix';
 
-/** Constrained flips in a curvature metric; UV polygon repairs retain double precision. */
+/** Constrained metric flips; Float32 repairs apply only when preparing final output. */
 export function legalizeTriangles(triangles: number[], samples: readonly { uv: Point; point: Vertex }[],
-  metric: readonly [number, number, number] = [1, 0, 1], mode: 'mesh' | 'polygon' = 'mesh'): void {
+  metric: readonly [number, number, number] = [1, 0, 1], mode: 'mesh' | 'polygon' | 'float32' = 'mesh'): void {
   const polygon = mode === 'polygon';
   const points = samples.map(({ uv }) => ({ uv: { x: metric[0] * uv.x + metric[1] * uv.y, y: metric[2] * uv.y } }));
+  const positions = samples.map(({ point }) => mode === 'float32' ? Array.from(point.position, Math.fround) as vec3 : point.position);
   const quality = (a: number, b: number, c: number) => {
-    const positions = [a, b, c].map(id => samples[id].point.position);
-    const ab = vec3.subtract([0, 0, 0], positions[1], positions[0]), ac = vec3.subtract([0, 0, 0], positions[2], positions[0]);
-    return vec3.length(vec3.cross([0, 0, 0], ab, ac))
-      / Math.max(vec3.squaredLength(ab), vec3.squaredLength(ac), vec3.squaredDistance(positions[1], positions[2]));
+    const ab = vec3.subtract([0, 0, 0], positions[b], positions[a]), ac = vec3.subtract([0, 0, 0], positions[c], positions[a]);
+    const area = vec3.length(vec3.cross([0, 0, 0], ab, ac));
+    return polygon ? area / Math.max(vec3.squaredLength(ab), vec3.squaredLength(ac), vec3.squaredDistance(positions[b], positions[c])) : area;
   };
   const cross = (a: Point, b: Point, c: Point) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
   const edgeKey = (a: number, b: number) => a < b ? `${a},${b}` : `${b},${a}`;
@@ -41,6 +41,13 @@ export function legalizeTriangles(triangles: number[], samples: readonly { uv: P
           const before = Math.min(quality(a, b, c), quality(a, b, d)), after = Math.min(quality(c, d, a), quality(c, d, b));
           repairsSliver ||= before < 1e-10 && after > before * 1.01;
           if (after < 1e-10 && after < before * 0.99) continue;
+        } else if (mode === 'float32') {
+          // A valid double-precision ear can become collinear in the output
+          // coordinates. Flip its diagonal so all shared boundary stations
+          // remain in nondegenerate Float32 triangles.
+          const before = Math.min(quality(a, b, c), quality(a, b, d)), after = Math.min(quality(c, d, a), quality(c, d, b));
+          repairsSliver ||= before === 0 && after > 0;
+          if (before > 0 && after === 0) continue;
         }
         if (!repairsSliver && determinant * Math.sign(cross(pa, pb, pc)) <= 1e-18) continue;
         const oriented = (ids: number[]) => cross(...ids.map(id => samples[id].uv) as [Point, Point, Point]) > 0 ? ids : [ids[0], ids[2], ids[1]];

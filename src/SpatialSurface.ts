@@ -5,6 +5,7 @@ import { validateVertex, type Vertex } from './Vertex.js';
 import { sampleSurface, type SurfaceGrid } from './internal/surfaceSampling.js';
 import type { Tessellation } from './internal/Tessellation.js';
 import type { RigidContext } from './internal/rigidContext.js';
+import { sampleParameterTolerance } from './internal/curveSamples.js';
 
 /** Physical parameter-domain sides; boundaries may run in either direction. Omit periodic seams. */
 export interface SurfaceSides {
@@ -29,6 +30,7 @@ export class SpatialSurface extends Surface {
   /** Physical boundaries at the four parameter-domain sides, in either native direction. */
   readonly sides: Readonly<SurfaceSides>;
   private grid?: SurfaceGrid;
+  private readonly prepared = new WeakMap<Tessellation, { source: SurfaceGrid; grid: SurfaceGrid }>();
   private directions = new Map<keyof SurfaceSides, boolean>();
 
   /**
@@ -134,9 +136,16 @@ export class SpatialSurface extends Surface {
     link('u0', 'u1'); link('v0', 'v1');
     const parameters = (side: keyof SurfaceSides) => this.sides[side] ? context.parameters(this.sides[side]!)
       .map(t => this.sideReversed(side) ? 1 - t : t) : [];
-    const samples = this.sample();
-    this.grid = sampleSurface(this, [...samples.u, ...parameters('v0'), ...parameters('v1')],
-      [...samples.v, ...parameters('u0'), ...parameters('u1')]);
+    let previous = this.prepared.get(context);
+    const samples = previous?.source ?? this.sample();
+    if (!previous && this.sample === SpatialSurface.prototype.sample) previous = { source: samples, grid: samples };
+    const u = [...samples.u, ...parameters('v0'), ...parameters('v1')], v = [...samples.v, ...parameters('u0'), ...parameters('u1')];
+    const includes = (grid: number[], values: number[]) => values.every(t => grid.some(value => Math.abs(value - t) <= sampleParameterTolerance));
+    if (!previous || !includes(previous.grid.u, u) || !includes(previous.grid.v, v)) {
+      previous = { source: samples, grid: sampleSurface(this, u, v) };
+    }
+    this.prepared.set(context, previous);
+    this.grid = previous.grid;
     for (const side of ['v0', 'v1', 'u0', 'u1'] as const) if (this.sides[side]) {
       const values = side[0] === 'v' ? this.grid.u : this.grid.v;
       context.request(this.sides[side]!, values.map(t => this.sideReversed(side) ? 1 - t : t));

@@ -1,11 +1,14 @@
 import { Edge } from '../Edge.js';
 import { Solid } from '../Solid.js';
+import { Face } from '../Face.js';
 import { chamferCurves } from '../internal/chamferCurves.js';
-import { chamferPlanes, clipChamferPlanes } from '../internal/chamferPlanes.js';
+import { chamferPlanar } from '../internal/chamferPlanes.js';
 import { validateSweepMesh } from '../internal/validateSweepMesh.js';
 import { Surface } from '../Surface.js';
 import { degtorad } from '../util/angles.js';
 import { searchBoundaries, type BoundarySelector } from './searchBoundaries.js';
+import { SurfaceGraph } from '../internal/surfaceGraph.js';
+import { retainSolidMesh } from '../internal/solidMesh.js';
 
 /**
  * Return a new solid with bevels on selected boundaries, without mutating the input.
@@ -28,10 +31,16 @@ import { searchBoundaries, type BoundarySelector } from './searchBoundaries.js';
  * remove material; concave bevels add it at corners such as pocket floors.
  * Closed rims on boolean-trimmed surface regions retain the original surface
  * equations and all unrelated trims, including oblique planar cut rims.
- * Convex straight edges between planar faces use analytic clipping planes.
- * Bevels meeting at planar corners are intersected together. Open curved corners,
- * concave straight corners, overlapping trims, and unresolved surface intersections
- * currently throw rather than returning invalid geometry. Existing surfaces,
+ * Straight planar bevels use local plane arrangements, including concave edges;
+ * unrelated components and remote surfaces are preserved. Open curved strips
+ * intersect planar or curved end surfaces and share exact closing boundaries.
+ * Connected strips meet along shared exact intersections. Three bevels at a
+ * regular three-support corner meet at one shared point; two-strip junctions
+ * trim any remaining end portion against its adjoining support.
+ * At the setback limit, consumed walls disappear and the bevel shares the
+ * unchanged opposite boundary. Setbacks beyond convergence still throw.
+ * Mixed corner arrangements, overlapping trims, and unresolved surface intersections
+ * throw rather than returning invalid geometry. Existing surfaces,
  * topology, coordinates, child lists, and memoized triangulations are unchanged.
  * @throws {@link RangeError} for invalid parameters or indices, nonmanifold input,
  * oversized bevels, or unsupported/unresolved trim intersections.
@@ -56,22 +65,22 @@ export function chamfer(options: Solid | {
   if (!Number.isFinite(length) || length <= 0) throw new RangeError('Chamfer length must be finite and positive');
   if (!Number.isFinite(angleDEG) || angleDEG <= 0 || angleDEG >= 90) throw new RangeError('Chamfer angle must be between 0 and 90 degrees');
   const selected = searchBoundaries({ solid, boundaries });
-  for (const boundary of solid.boundaries) {
-    if (solid.surfaces.filter(surface => surface.boundaries.includes(boundary)).length !== 2) {
-      throw new RangeError('Chamfer requires a closed manifold solid with two surfaces per boundary');
-    }
-  }
-  if (!selected.length) return new Solid({ surfaces: solid.surfaces }).add(...solid.children);
+  const graph = new SurfaceGraph(solid.surfaces);
+  graph.validate('Chamfer');
+  if (!selected.length) return new Solid({ surfaces: solid.surfaces }).add(solid.children);
   const angleRAD = degtorad(angleDEG);
-  const straight = selected.filter(boundary => boundary instanceof Edge);
-  const cuts = chamferPlanes(solid, straight, length, angleRAD);
-  const curved = selected.filter(boundary => !(boundary instanceof Edge));
-  const surfaces = clipChamferPlanes(chamferCurves(solid.surfaces, curved, length, angleRAD), cuts, length);
+  const straight = selected.filter((boundary): boundary is Edge => boundary instanceof Edge
+    && [boundary.start, boundary.end].every(vertex => graph.atVertex(vertex).length === 3
+      && graph.atVertex(vertex).every(surface => surface instanceof Face
+        && surface.boundaries.filter(edge => edge.start === vertex || edge.end === vertex).every(edge => edge instanceof Edge))));
+  const curved = selected.filter(boundary => !(boundary instanceof Edge && straight.includes(boundary)));
+  const surfaces = chamferCurves(chamferPlanar(solid, straight, length, angleRAD), curved, length, angleRAD);
   const result = new Solid({ surfaces });
-  for (const boundary of result.boundaries) if (surfaces.filter(surface => surface.boundaries.includes(boundary)).length !== 2) {
-    throw new RangeError('Chamfer trim intersections did not produce shared manifold topology');
+  new SurfaceGraph(surfaces).validate('Chamfer result');
+  try {
+    const positions = Surface.triangulateAll(surfaces);
+    validateSweepMesh(positions); retainSolidMesh(result, positions);
   }
-  try { validateSweepMesh(Surface.triangulateAll(surfaces)); }
   catch (cause) { throw new RangeError(`Chamfer validation failed: ${cause instanceof Error ? cause.message.replaceAll('Sweep', 'Solid') : cause}`, { cause }); }
-  return result.add(...solid.children);
+  return result.add(solid.children);
 }

@@ -204,10 +204,10 @@ test('numerical fallback rounds convex and concave straight edges adjoining curv
   }
 });
 
-test('numerical fallback trims oblique planar end caps instead of requiring perpendicular caps', () => {
+test('analytic strips intersect oblique planar end caps', () => {
   const source = sketch().add(rectangle({ center, width: 4, height: 4 })).extrude({ length: 4, axis: [0.4,0,1] });
   const edge = source.boundaries.find(boundary => boundary instanceof Edge && boundary.start.position[2] !== boundary.end.position[2]);
-  assert.throws(() => roundPlanes(source, [edge], 0.2, new RoundTopology(0.2)), /oblique/);
+  check(new Solid(roundPlanes(source, [edge], 0.2, new RoundTopology(0.2))));
   const result = source.round({ radius: 0.2, boundaries: edge });
   assert.ok(check(result) < check(source)); checkTangency(result, result.surfaces.at(-1));
 });
@@ -459,12 +459,6 @@ test('invalid options, nonmanifold input, oversized radii and unsupported corner
   assert.throws(() => new Solid({ surfaces: [source.surfaces[0]] }).round(), /manifold/);
   assert.throws(() => source.round({ radius: 1.1 }), error => error instanceof RangeError && !(error instanceof UnsupportedRoundError) && /consumes/.test(error.message));
   assert.throws(() => cylinder().round({ radius: 1.1 }), RangeError);
-  assert.throws(() => source.round({ boundaries: [0, 1] }), /one selected edge or all three/);
-  // A curved boundary at the selected edge's endpoint still needs curved corner trimming.
-  const mixed = sketch().add(lineSegment({ start: { x: 1, y: 0 }, end: { x: -1, y: 0 } }),
-    planarCurve({ at: t => ({ x: Math.cos(Math.PI * t), y: t === 1 ? 0 : Math.sin(Math.PI * t) }) })).extrude(2);
-  const straightRim = mixed.boundaries.find(boundary => boundary instanceof Edge && boundary.start.position[2] === 0 && boundary.end.position[2] === 0);
-  assert.throws(() => mixed.round({ radius: 0.1, boundaries: straightRim }), /curved corner trimming/);
   assert.equal(source.triangulate(), cached);
   const empty = new Solid({ surfaces: [] });
   assert.deepEqual(empty.round().surfaces, []); assert.notEqual(empty.round(), empty);

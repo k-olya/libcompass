@@ -230,7 +230,7 @@ test('invalid arguments and unresolved or oversized intersections throw without 
   assert.equal(part.triangulate(), cached);
 });
 
-test('open curved corners and nonconvex straight corners fail explicitly', () => {
+test('open curved chamfers share exact end contacts and local concave straight bevels add material', () => {
   const arc = planarCurve({ at: t => {
     const angleRAD = Math.PI * t;
     return { x: t === 1 ? -5 : 5 * Math.cos(angleRAD), y: t === 0 || t === 1 ? 0 : 5 * Math.sin(angleRAD) };
@@ -238,8 +238,14 @@ test('open curved corners and nonconvex straight corners fail explicitly', () =>
   const s = sketch().add(arc, lineSegment({ start: arc.end, end: arc.start }));
   const part = extrude({ sketch: s, length: 10 });
   const curved = part.boundaries.findIndex(boundary => boundary instanceof SpatialCurve);
-  assert.throws(() => chamfer({ solid: part, boundaries: [curved] }), /Open curved.*corner/);
+  const beveled = chamfer({ solid: part, boundaries: [curved] });
+  assert.ok(check(beveled) < check(part));
+  const blend = beveled.surfaces.at(-1);
+  for (const end of [blend.sides.u0, blend.sides.u1]) assert.equal(beveled.surfaces.filter(surface => surface.boundaries.includes(end)).length, 2);
   const points = [[0, 0], [4, 0], [4, 1], [1, 1], [1, 4], [0, 4]].map(([x, y]) => ({ x, y }));
   const concave = extrude({ sketch: sketch().add(...points.map((start, i) => lineSegment({ start, end: points[(i + 1) % points.length] }))), length: 10 });
-  assert.throws(() => chamfer({ solid: concave }), /nonconvex/);
+  const inside = concave.boundaries.find(boundary => boundary.start.position[0] === 1 && boundary.start.position[1] === 1
+    && boundary.end.position[0] === 1 && boundary.end.position[1] === 1);
+  check(chamfer({ solid: concave, boundaries: inside, length: 0.2 }), 70 + 10 * 0.2 ** 2 / 2);
+  assert.throws(() => chamfer({ solid: concave }), /corner|overlap/);
 });

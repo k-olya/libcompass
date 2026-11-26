@@ -14,11 +14,12 @@ export function sampleSurface(surface: { at(u: number, v: number): Vertex }, uSe
     .map(t => t < tolerance ? 0 : t > 1 - tolerance ? 1 : t).sort((a, b) => a - b)
     .filter((t, i, all) => !i || t - all[i - 1] > tolerance);
   let u = sorted(uSeeds), v = sorted(vSeeds);
-  const cache = new Map<string, Vertex>();
+  const cache = new Map<number, Map<number, Vertex>>();
   const at = (a: number, b: number) => {
-    const key = `${a},${b}`;
-    let point = cache.get(key);
-    if (!point) cache.set(key, point = surface.at(a, b));
+    let row = cache.get(a);
+    if (!row) { row = new Map(); cache.set(a, row); }
+    let point = row.get(b);
+    if (!point) row.set(b, point = surface.at(a, b));
     return point;
   };
   for (let level = 0; level < 20; level++) {

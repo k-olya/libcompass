@@ -29,10 +29,19 @@ export function spherical(a: ReadonlyVec3, b: ReadonlyVec3, t: number): vec3 {
 export class RoundTopology {
   readonly tolerance: number;
   private readonly vertices = new Map<string, Vertex[]>();
-  private readonly rails: SpatialBoundary[] = [];
+  private readonly rails = new Map<Vertex, Map<Vertex, SpatialBoundary[]>>();
   constructor(radius: number, vertices: readonly Vertex[] = []) {
     this.tolerance = Math.max(1e-10, radius * 1e-8);
     for (const vertex of vertices) this.vertex(vertex.position, vertex);
+  }
+
+  /** Existing boundaries can become contact rails when an adjoining wall is fully consumed. */
+  retain(boundaries: Iterable<SpatialBoundary>): void {
+    for (const boundary of boundaries) {
+      const entries = this.rails.get(boundary.start) ?? new Map(), previous = entries.get(boundary.end) ?? [];
+      if (!previous.includes(boundary)) previous.push(boundary);
+      entries.set(boundary.end, previous); this.rails.set(boundary.start, entries);
+    }
   }
 
   vertex(position: ReadonlyVec3, source?: Vertex): Vertex {
@@ -54,7 +63,8 @@ export class RoundTopology {
     const samples = candidate.sample();
     if (samples.every(point => vec3.distance(point.position, start.position) <= this.tolerance)) return { at: () => start };
     const boundary = straight ? new Edge({ start, end }) : candidate;
-    for (const previous of this.rails) {
+    const previousRails = [...this.rails.get(start)?.get(end) ?? [], ...(start === end ? [] : this.rails.get(end)?.get(start) ?? [])];
+    for (const previous of previousRails) {
       const reverse = previous.start === end && previous.end === start;
       if (!reverse && !(previous.start === start && previous.end === end)) continue;
       const parameters = [...new Set([...parameterizedSamples(boundary).map(({ t }) => t),
@@ -66,7 +76,8 @@ export class RoundTopology {
         }
       }
     }
-    this.rails.push(boundary);
+    const entries = this.rails.get(start) ?? new Map(), previous = entries.get(end) ?? [];
+    previous.push(boundary); entries.set(end, previous); this.rails.set(start, entries);
     return { boundary, at: t => boundary.at(t) };
   }
 

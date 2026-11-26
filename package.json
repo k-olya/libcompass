@@ -28,6 +28,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "bench:blends": "npm run build && node bench/blends.mjs",
     "test": "npm run build && node --test",
     "prepack": "npm run build"
   },

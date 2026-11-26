@@ -863,6 +863,8 @@ Shared defaults live in `src/defaults/` and are exported from the root:
 | `negY` | Zero-origin unit spatial line `[0, -1, 0]` | — |
 | `negZ` | Zero-origin unit spatial line `[0, 0, -1]` | — |
 | `XY` | Plane at the world origin, local axes +X / +Y | +Z |
+| `YX` | Plane at the world origin, local axes +Y / +X | -Z |
+| `XZ` | Plane at the world origin, local axes +X / +Z | -Y |
 | `ZX` | Plane at the world origin, local axes +Z / +X | +Y |
 | `YZ` | Plane at the world origin, local axes +Y / +Z | +X |
 
@@ -1040,17 +1042,31 @@ geometry-producing node subclasses override `triangulateUncached()`. `Transform`
 exposes XYZ `position`, `rotation` (degrees, XYZ Euler order), and `scale` objects.
 Sketches, planes, vertices, edges, curves, and surfaces remain independent math objects.
 
-`AnnotatedNode` extends `Memo` with mutable `name`, `color`, and `alpha` display
-properties. Omitted names become `mesh1`, `mesh2`, ... using a hidden built-in
+`AnnotatedNode` extends `Memo` with mutable `name`, `color`, `alpha`, and `exclude`
+annotation properties. Omitted names become `mesh1`, `mesh2`, ... using a hidden built-in
 counter. Only successful unnamed constructions increment it; explicit names do
 not. The counter persists for the loaded library instance. Color defaults to
 `'default'`, preserving the original gold (`#d2a568`), and alpha defaults to `1`.
 Alpha ranges from `0` (invisible) to `1` (opaque). Use the constructor or
 `annotatedNode(options)` for a general group, or wrap any node (including groups,
 transforms, and solids) with `annotate(node)`,
-`annotate({ node, name?, color?, alpha? })`, or `node.annotate(options)`.
+`annotate({ node, name?, color?, alpha?, exclude? })`, or `node.annotate(options)`.
 The wrapper retains the original node without changing its geometry, topology,
 children, or cached mesh. Annotation edits alone do not invalidate geometry.
+
+Use `annotate({ geometry, name?, color?, alpha? })` for planes, sketches, planar
+entities (including points), spatial lines and curves, or nested readonly arrays
+of them. The constructor and shorthand accept the same optional `geometry` field;
+it may accompany `node` to show construction geometry alongside a solid. Hosts
+display these entities as lines, without adding anything to triangulation or STL.
+Sketches retain their placement planes; standalone planar geometry uses world XY.
+The compassts viewer samples curves through `.sample()`, displays infinite lines
+with a finite span, and represents planes by local X/Y/normal axes.
+
+```ts
+scene.add(annotate({ geometry: sketch(XY).add(circle(5)), color: 'blue' }));
+scene.add(annotatedNode({ geometry: ZX, name: 'Construction plane' }));
+```
 
 ```ts
 scene.add(body.annotate({ name: 'Housing', color: '#5599dd', alpha: 0.6 }));
@@ -1073,8 +1089,15 @@ Three.js mesh with its own color and opacity. Nested annotations control their
 own subtrees; their geometry is excluded from ancestor meshes. Unannotated
 descendants share the nearest annotation, while other geometry keeps the default
 material. Each repeated child occurrence retains its own placement. Full scene
-triangulation and STL export still include all geometry, even at alpha zero,
-without changing coordinates or duplicating triangles for nested annotations.
+triangulation still includes all geometry, even at alpha zero, without changing
+coordinates or duplicating triangles for nested annotations. Set `exclude: true`
+(default `false`) to omit an annotated subtree from compassts's overall STL export.
+Nested annotations cannot override an excluded ancestor. The geometry stays visible,
+its context menu marks the exclusion, and individual mesh export remains available.
+
+```ts
+scene.add(tool.annotate({ name: 'Reference tool', alpha: 0.3, exclude: true }));
+```
 
 Use `node.add(first, second)` to append children and `node.remove(first, second)`
 to remove child objects by identity. Both methods return the node for chaining.

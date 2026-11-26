@@ -21,7 +21,8 @@
 - Put shared default objects in `src/defaults/` and re-export them from the root.
   Defaults are instances or values, not constructor shorthands. Treat shared
   defaults and their coordinate arrays as immutable. Plane names specify local
-  axis order: `XY` uses X/Y, `ZX` uses Z/X, and `YZ` uses Y/Z. `X`, `Y`, `Z`,
+  axis order: `XY` uses X/Y, `YX` uses Y/X, `XZ` uses X/Z, `ZX` uses Z/X,
+  and `YZ` uses Y/Z; normals follow local X cross local Y. `X`, `Y`, `Z`,
   `negX`, `negY`, and `negZ` are unit `SpatialLine` instances with zero origins;
   `negX`, `negY`, and `negZ` point along the corresponding negative world axes.
   SpatialLine is a vec3-compatible direction array with a copied origin;
@@ -279,15 +280,24 @@
 The tree-based API is retained but development is on hold. The following rules
 apply only to those node classes:
 
-- AnnotatedNode extends Memo and adds name, color, and alpha. Omitted names
+- AnnotatedNode extends Memo and adds name, color, alpha, and exclude. Omitted names
   become mesh1, mesh2, ... from a hidden module counter; only successful unnamed
   constructions increment it. Alpha defaults to 1. Color defaults to 'default'
   from the immutable 16-entry `colors` palette and accepts only palette names
   or #RGB/#RRGGBB strings, including property assignments. Resolve names to hex;
   do not accept arbitrary CSS names/functions or RGB numbers.
-  `annotate(node)`, `annotate({ node, name?, color?, alpha? })`, and `node.annotate()`
+  `annotate(node)`, `annotate({ node, name?, color?, alpha?, exclude? })`, and `node.annotate()`
   wrap any Node, including groups and transforms, retaining the original node.
-  Annotations do not alter geometry or STL exports. The app renders nearest-annotated subtrees separately,
+  The optional geometry field accepts planes, sketches, planar entities, spatial
+  lines/curves and nested readonly arrays as line-preview geometry. Keep geometry
+  references and math objects unchanged; line previews never contribute triangles.
+  Hosts sample curves through sample(), place sketches on their planes and standalone
+  planar entities on world XY, and preserve ancestor transforms per occurrence.
+  Annotations do not alter triangulation. Exclude defaults to false and accepts a
+  boolean; true omits the whole annotated subtree (including nested annotations)
+  from the app's overall export while retaining preview geometry and individual
+  mesh downloads. Mark effective exclusion in the mesh context menu. Preserve
+  world-space triangle order during filtered exports. The app renders nearest-annotated subtrees separately,
   excluding nested annotated geometry from ancestor meshes. Keep own triangles
   before child triangles in insertion order so world-space mesh ranges retain
   transforms and shared child occurrences without duplicating geometry.

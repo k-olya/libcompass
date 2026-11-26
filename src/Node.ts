@@ -1,4 +1,4 @@
-import { annotate } from './operations/annotate.js';
+import type { AnnotationGeometry } from './AnnotationGeometry.js';
 import { colors, type AnnotationColor } from './defaults/colors.js';
 
 // Keep base classes together to avoid an inheritance cycle through Node.annotate().
@@ -20,6 +20,8 @@ export class Node {
    * @param options.name - Preview mesh name; omitted names use a hidden mesh1, mesh2, ... counter.
    * @param options.color - Palette name or #RGB/#RRGGBB string; defaults to 'default'.
    * @param options.alpha - Opacity in [0, 1]; defaults to 1.
+   * @param options.exclude - Exclude this subtree from the app's overall export; defaults to false.
+   * @param options.geometry - Optional additional geometry displayed as lines by the host.
    * @returns An AnnotatedNode retaining this node unchanged as its child.
    * @see {@link annotate}
    */
@@ -30,7 +32,11 @@ export class Node {
     color?: AnnotationColor;
     /** Opacity in [0, 1]; defaults to 1. */
     alpha?: number;
-  } = {}): AnnotatedNode { return annotate({ ...options, node: this }); }
+    /** Exclude this subtree from the app's overall export; defaults to false. */
+    exclude?: boolean;
+    /** Additional line-preview geometry; never contributes triangles. */
+    geometry?: AnnotationGeometry;
+  } = {}): AnnotatedNode { return new AnnotatedNode(options).add(this); }
 
   /**
    * Append child nodes in the supplied order.
@@ -155,10 +161,10 @@ export function memo(): Memo { return new Memo(); }
 let meshNumber = 0;
 
 /**
- * A memoized scene group with a display name, color, and opacity.
+ * A memoized scene group with display and export annotations.
  *
  * @remarks
- * Annotations do not change geometry or STL coordinates. The app renders this
+ * Annotations do not change triangulation or coordinates. The app renders this
  * group's geometry as a separate mesh; nested AnnotatedNodes get their own meshes
  * and annotations. Geometry remains cached until refresh(), just as with Memo.
  * Editing annotations alone does not require refreshing geometry caches.
@@ -178,41 +184,54 @@ export class AnnotatedNode extends Memo {
   }
   /** Opacity from 0 (invisible) to 1 (opaque); defaults to 1. */
   alpha: number;
+  /** Exclude this entire subtree from the app's overall export; preview geometry is unchanged. */
+  exclude: boolean;
+  /** Optional line-preview geometry, retained by reference and excluded from triangulation. */
+  geometry?: AnnotationGeometry;
 
   /**
-   * Create a memoized annotated group with no children.
-   * @param options - Optional display name, color, and opacity.
-   * @throws {@link TypeError} if name or color has an invalid type.
+   * Create a memoized annotated group with optional line-preview geometry and no children.
+   * @param options - Optional geometry, display name, color, opacity, and export exclusion.
+   * @throws {@link TypeError} if name, color, or exclude has an invalid type.
    * @throws {@link RangeError} if alpha is outside [0, 1] or color is not a palette name or hex RGB string.
    */
-  constructor({ name, color = 'default', alpha = 1 }: {
+  constructor({ name, color = 'default', alpha = 1, exclude = false, geometry }: {
     name?: string;
     color?: AnnotationColor;
     alpha?: number;
+    exclude?: boolean;
+    geometry?: AnnotationGeometry;
   } = {}) {
     super();
     if (name !== undefined && typeof name !== 'string') throw new TypeError('Annotation name must be a string');
+    if (typeof exclude !== 'boolean') throw new TypeError('Annotation exclude must be a boolean');
     if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1) throw new RangeError('Annotation alpha must be between 0 and 1');
     this.color = color;
     this.alpha = alpha;
+    this.exclude = exclude;
+    this.geometry = geometry;
     this.name = name ?? `mesh${++meshNumber}`;
   }
 }
 
 /**
- * Create a memoized annotated group with no children.
+ * Create a memoized annotated group with optional line-preview geometry and no children.
  *
  * Constructor shorthand for `new AnnotatedNode(options)`; returns a new {@link AnnotatedNode} instance.
  *
- * @param options - Optional display name, color, and opacity.
- * @throws {@link TypeError} if name or color has an invalid type.
+ * @param options - Optional geometry, display name, color, opacity, and export exclusion.
+ * @throws {@link TypeError} if name, color, or exclude has an invalid type.
  * @throws {@link RangeError} if alpha is outside [0, 1] or color is not a palette name or hex RGB string.
  */
 export function annotatedNode(options: {
+  /** Geometry displayed as lines by hosts; never contributes triangles. */
+  geometry?: AnnotationGeometry;
   /** Display name; omitted names use the hidden mesh1, mesh2, ... counter. */
   name?: string;
   /** Palette name or #RGB/#RRGGBB string; defaults to 'default'. */
   color?: AnnotationColor;
   /** Opacity in [0, 1]; defaults to 1. */
   alpha?: number;
+  /** Exclude this subtree from the app's overall export; defaults to false. */
+  exclude?: boolean;
 } = {}): AnnotatedNode { return new AnnotatedNode(options); }

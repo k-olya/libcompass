@@ -1,8 +1,25 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AnnotatedNode, Memo, Node, Solid, Transform, TransformMat4, annotate, annotatedNode, center, circle, colors, sketch } from 'libcompass';
+import { AnnotatedNode, Memo, Node, Solid, Transform, TransformMat4, XY, Z, annotate, annotatedNode, center, circle, colors, rectangle, sketch, spatialCurve } from 'libcompass';
 import { AnnotatedNode as DirectAnnotatedNode } from 'libcompass/AnnotatedNode';
 import { annotate as directAnnotate } from 'libcompass/operations/annotate';
+
+test('annotations retain line-preview geometry without adding triangles or changing source caches', () => {
+  const geometry = [XY, Z, sketch().add(circle(2)), rectangle({ center, width: 4, height: 2 }), center,
+    spatialCurve(t => ({ position: [t, t * t, 1] }))];
+  for (const wrapper of [annotate({ geometry }), annotatedNode({ geometry }), new AnnotatedNode({ geometry })]) {
+    assert.equal(wrapper.geometry, geometry);
+    assert.deepEqual(wrapper.children, []);
+    assert.equal(wrapper.triangulate().length, 0);
+  }
+  const source = sketch().add(circle(2)).extrude(3), cached = source.triangulate();
+  for (const wrapper of [annotate({ node: source, geometry }), source.annotate({ geometry })]) {
+    assert.equal(wrapper.geometry, geometry);
+    assert.equal(wrapper.children[0], source);
+    assert.deepEqual(wrapper.triangulate(), cached);
+  }
+  assert.equal(source.triangulate(), cached);
+});
 
 test('AnnotatedNode is a standard memo group with independent annotation properties', () => {
   assert.equal(AnnotatedNode, DirectAnnotatedNode);
@@ -78,6 +95,26 @@ test('any node can be annotated, preserving grouped, transformed and nested geom
   assert.equal(group.children[1], inner);
   assert.equal(inner.name, 'Inner');
   assert.equal(inner.color, colors.blue);
+});
+
+test('export exclusion defaults to false and does not alter triangulation or caches', () => {
+  const source = sketch().add(circle(2)).extrude(3), cached = source.triangulate();
+  assert.equal(annotatedNode().exclude, false);
+  assert.equal(annotate(source).exclude, false);
+  for (const wrapper of [annotate({ node: source, exclude: true }), source.annotate({ exclude: true }),
+    annotatedNode({ exclude: true }).add(source), new AnnotatedNode({ exclude: true }).add(source)]) {
+    assert.equal(wrapper.exclude, true);
+    assert.deepEqual(wrapper.children, [source]);
+    const positions = wrapper.triangulate();
+    assert.deepEqual(positions, cached);
+    wrapper.exclude = false;
+    assert.equal(wrapper.triangulate(), positions);
+  }
+  assert.equal(source.triangulate(), cached);
+  for (const exclude of [null, 0, 1, 'true', {}, []]) {
+    assert.throws(() => annotatedNode({ exclude }), TypeError);
+    assert.throws(() => annotate({ node: source, exclude }), TypeError);
+  }
 });
 
 test('palette has sixteen immutable distinct colors and accepts names or hex strings only', () => {

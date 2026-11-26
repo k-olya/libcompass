@@ -12,6 +12,7 @@
 export { Node, node } from './Node.js';
 export { Memo, memo } from './Memo.js';
 export { AnnotatedNode, annotatedNode } from './AnnotatedNode.js';
+export type { AnnotationGeometry } from './AnnotationGeometry.js';
 export { annotate } from './operations/annotate.js';
 export { TransformMat4, transformMat4Node } from './TransformMat4.js';
 export { Transform, transform } from './Transform.js';
@@ -70,6 +71,6 @@ export { TrimmedSurface, trimmedSurface } from './TrimmedSurface.js';
 export { SurfaceRegion, surfaceRegion, type SurfaceTrim, type SurfaceRegionChart } from './SurfaceRegion.js';
 export { TRIANGULATION_RESOLUTION, setTriangulationResolution } from './triangulation.js';
 export { X, Y, Z, negX, negY, negZ } from './defaults/axes.js';
-export { XY, ZX, YZ } from './defaults/planes.js';
+export { XY, YX, XZ, ZX, YZ } from './defaults/planes.js';
 export { center, origin } from './defaults/points.js';
 export { colors, type AnnotationColor } from './defaults/colors.js';

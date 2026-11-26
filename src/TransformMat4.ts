@@ -1,4 +1,4 @@
-import type { ReadonlyMat4 } from 'gl-matrix';
+import { mat4, type ReadonlyMat4 } from 'gl-matrix';
 import { Memo } from './Memo.js';
 import { transformMat4 } from './util/transformMat4.js';
 
@@ -26,10 +26,17 @@ export class TransformMat4 extends Memo {
    * Transform the completed, uncached child triangulation before it is cached.
    *
    * @returns The combined child positions transformed in place in their fresh array.
+   * Orientation-reversing matrices also reverse triangle winding to retain outward normals.
    * @throws {@link RangeError} if the combined positions do not form whole XYZ triplets.
    */
   protected override triangulateUncached(): Float32Array {
-    return transformMat4(super.triangulateUncached(), this.matrix);
+    const positions = transformMat4(super.triangulateUncached(), this.matrix);
+    if (mat4.determinant(this.matrix) < 0) {
+      for (let i = 0; i < positions.length; i += 9) for (let axis = 0; axis < 3; axis++) {
+        [positions[i + 3 + axis], positions[i + 6 + axis]] = [positions[i + 6 + axis], positions[i + 3 + axis]];
+      }
+    }
+    return positions;
   }
 }
 

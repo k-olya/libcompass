@@ -934,6 +934,22 @@ under new lazy transform nodes referencing the original children. Inputs, child
 lists and memo caches are never modified by the operation. Treat captured source
 geometry as immutable, as with other evaluator-based operations.
 
+`mirror({ solid, plane })` reflects a solid across an infinite world-space plane.
+The matching method accepts `part.mirror(plane)` or `part.mirror({ plane })`.
+Plane position and orientation define the reflection; reversing its normal has
+no effect. The result retains mathematical surfaces, trim charts, sampling
+overrides, shared boundaries and vertices, with outward-facing normals and
+triangle winding. Child nodes are mirrored lazily under new transform nodes;
+the original geometry, child lists and memo caches are unchanged. Mirroring
+returns the reflected copy alone; combine it with the original using `union`
+when desired. The compassts Solid tools category includes a Mirror button.
+
+```ts
+const reflected = mirror({ solid: part, plane: YZ });
+const offsetReflection = part.mirror(YZ.displace([10, 0, 0]));
+scene.add(part, reflected);
+```
+
 ## Geometry arrays
 
 `displacementArray({ object, vector, N, offset, width })`,

@@ -1,6 +1,8 @@
 import type { SpatialLine } from './SpatialLine.js';
 import { rotate } from './operations/rotate.js';
 import { displace } from './operations/displace.js';
+import { mirror } from './operations/mirror.js';
+import { Plane } from './Plane.js';
 import { Memo } from './Memo.js';
 import { round } from './operations/round.js';
 import { chamfer } from './operations/chamfer.js';
@@ -81,6 +83,18 @@ export class Solid extends Memo {
     /** Finite XYZ displacement in model units. */
     vector: ReadonlyVec3;
   }): this { return displace({ object: this, vector: 'vector' in options ? options.vector : options }); }
+
+  /**
+   * Reflect this solid across a world-space plane without changing the source.
+   * Accepts the plane directly, or an options object containing plane.
+   * @param options - Reflection plane; its normal's sign does not affect the result.
+   * @returns A new solid retaining exact topology and outward orientation, with lazily mirrored children.
+   * @see {@link mirror}
+   */
+  mirror(options: Plane | {
+    /** World-space reflection plane, including its origin. */
+    plane: Plane;
+  }): Solid { return mirror({ solid: this, plane: options instanceof Plane ? options : options.plane }); }
 
   /**
    * Return a new chamfered solid, leaving this solid and its cached mesh unchanged.

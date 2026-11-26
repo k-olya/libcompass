@@ -111,7 +111,7 @@ export class SpatialSurface extends Surface {
   protected override copyTransformed(context: RigidContext): SpatialSurface {
     return this.transformedSamples(new SpatialSurface({ at: (u, v) => context.vertex(this.at(u, v)),
       boundaryLoops: this.boundaryLoops.map(loop => loop.map(context.map)), sides: this.transformedSides(context),
-      periodicU: this.periodicU, periodicV: this.periodicV, reversed: this.reversed, poles: this.poles.map(context.vertex) }), context);
+      periodicU: this.periodicU, periodicV: this.periodicV, reversed: this.reversed !== context.reflected, poles: this.poles.map(context.vertex) }), context);
   }
 
   /** Infer a side's native boundary direction, including loops with identical endpoints. */

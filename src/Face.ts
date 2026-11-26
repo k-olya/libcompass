@@ -67,8 +67,11 @@ export class Face extends Surface {
     validateLoops(loops.map(loop => loop.map(vertex => this.plane.toLocal(vertex))));
   }
 
-  protected override copyTransformed({ map }: RigidContext): Face {
-    return new Face({ outer: this.outer.map(map), holes: this.holes.map(loop => loop.map(map)), plane: map(this.plane) });
+  protected override copyTransformed({ map, reflected }: RigidContext): Face {
+    const frame = map(this.plane);
+    const plane = reflected ? new Plane({ a: frame.origin, b: frame.toWorld({ x: 1, y: 0 }),
+      c: frame.toWorld({ x: 0, y: -1 }) }) : frame;
+    return new Face({ outer: this.outer.map(map), holes: this.holes.map(loop => loop.map(map)), plane });
   }
 
   protected override mesh(context: Tessellation): Float32Array {

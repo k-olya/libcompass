@@ -81,7 +81,7 @@ export class RuledSurface extends SpatialSurface {
     const { map, vertex } = context, sides = this.transformedSides(context);
     return this.transformedSamples(new RuledSurface({ start: map(this.start),
       end: 'position' in this.end ? vertex(this.end) : map(this.end),
-      sides: sides.u0 ? [sides.u1 as Edge, sides.u0 as Edge] : undefined, reversed: this.reversed }), context);
+      sides: sides.u0 ? [sides.u1 as Edge, sides.u0 as Edge] : undefined, reversed: this.reversed !== context.reflected }), context);
   }
 
   protected override prepare(context: Tessellation): void {

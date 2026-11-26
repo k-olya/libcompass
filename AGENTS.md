@@ -38,6 +38,13 @@
   Preserve shared vertices/boundaries, curve/surface sampling overrides, parameter
   charts, periodicity and orientation. Transform solid child geometry lazily under
   new transform nodes without changing source child nodes.
+- Mirror reflects a Solid across a world-space Plane, returning a new Solid;
+  accept `mirror({ solid, plane })`, `solid.mirror(plane)` and the named method form.
+  Preserve exact evaluators, sampler overrides, trim charts, shared topology and
+  source caches through the shared rigid copier. Reflection reverses handedness:
+  correct planar face frames and curved-surface orientation to keep normals outward.
+  Mirror child geometry lazily under new transform nodes retaining original children.
+  TransformMat4 reverses triangle winding for negative-determinant matrices.
 - Displacement/rotation/curve arrays return ordinary arrays of fresh transformed copies,
   including a fresh zero-offset copy. Use width = N * offset (endpoint excluded),
   deriving a missing count by flooring width / offset with roundoff tolerance.

@@ -17,4 +17,5 @@ test('transform methods work when classes are imported directly, without the roo
   const copy = solid.rotate({ axis, angle: 30 }).displace({ vector: [1, 2, 3] });
   assert.ok(copy instanceof Solid);
   assert.notEqual(copy, solid);
+  assert.ok(solid.mirror(source) instanceof Solid);
 });

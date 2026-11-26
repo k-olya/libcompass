@@ -1,4 +1,4 @@
-import { vec3, type ReadonlyMat4, type ReadonlyVec3 } from 'gl-matrix';
+import { mat4, vec3, type ReadonlyMat4, type ReadonlyVec3 } from 'gl-matrix';
 import { Edge } from '../Edge.js';
 import { Plane } from '../Plane.js';
 import { SpatialCurve } from '../SpatialCurve.js';
@@ -12,6 +12,7 @@ import type { SpatialBoundary } from '../SpatialBoundary.js';
 
 /** Copy analytic geometry through a rigid matrix, retaining shared topology and sampling overrides. */
 export function rigidTransform<T extends SpatialObject>(object: T, matrix: ReadonlyMat4): T {
+  const reflected = mat4.determinant(matrix) < 0;
   const copies = new WeakMap<object, object>();
   const point = (p: ReadonlyVec3) => validateVertex({ position: vec3.transformMat4([0, 0, 0], p, matrix) }).position;
   const direction = (p: ReadonlyVec3): ReadonlyVec3 => validateVertex({ position: [
@@ -51,9 +52,9 @@ export function rigidTransform<T extends SpatialObject>(object: T, matrix: Reado
       };
       copy = curve;
     } else if (source instanceof Surface) {
-      copy = transformSurface(source, { map, vertex });
+      copy = transformSurface(source, { map, vertex, reflected });
     } else {
-      const solid = rigidCopies.solid?.(source, { map, vertex }, matrix);
+      const solid = rigidCopies.solid?.(source, { map, vertex, reflected }, matrix);
       if (!solid) throw new TypeError('Transform requires a plane, spatial line/curve, edge, surface or solid');
       copy = solid;
     }

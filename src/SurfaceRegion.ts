@@ -65,11 +65,11 @@ export class SurfaceRegion extends Surface {
   /** V periodicity of the original parameter chart. */
   get periodicV(): boolean { return this.surface.periodicV; }
 
-  protected override copyTransformed({ map }: RigidContext): SurfaceRegion {
+  protected override copyTransformed({ map, reflected }: RigidContext): SurfaceRegion {
     const trim = (item: SurfaceTrim): SurfaceTrim => ({ ...item, boundary: map(item.boundary) });
     return new SurfaceRegion({ surface: map(this.surface), regions: this.regions.map(chart => ({
       outer: chart.outer.map(trim), holes: chart.holes?.map(hole => hole.map(trim)),
-    })), boundaryLoops: this.boundaryLoops.map(loop => loop.map(map)), reversed: this.reversed });
+    })), boundaryLoops: this.boundaryLoops.map(loop => loop.map(map)), reversed: this.reversed !== reflected });
   }
 
   protected override prepare(context: Tessellation): void { this.prepared = regionMesh(this, context); }

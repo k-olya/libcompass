@@ -61,7 +61,7 @@ export class TrimmedSurface extends SpatialSurface {
   protected override copyTransformed(context: RigidContext): TrimmedSurface {
     return this.transformedSamples(new TrimmedSurface({ surface: context.map(this.surface), at: (u, v) => this.parameters(u, v),
       boundaryLoops: this.boundaryLoops.map(loop => loop.map(context.map)), sides: this.transformedSides(context),
-      periodicU: this.periodicU, periodicV: this.periodicV, reversed: this.reversed }), context);
+      periodicU: this.periodicU, periodicV: this.periodicV, reversed: this.reversed !== context.reflected }), context);
   }
 }
 

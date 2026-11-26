@@ -6,6 +6,8 @@ import type { Vertex } from '../Vertex.js';
 
 /** Shared identity maps while copying one mathematical object and its topology. */
 export interface RigidContext {
+  /** Whether the isometry changes handedness, requiring reversed surface orientation. */
+  reflected: boolean;
   map<T extends SpatialObject | SpatialBoundary>(object: T): T;
   vertex(vertex: Vertex): Vertex;
 }

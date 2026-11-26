@@ -59,6 +59,7 @@ export { SpatialLine, spatialLine } from './SpatialLine.js';
 export type { SpatialObject } from './SpatialObject.js';
 export { rotate } from './operations/rotate.js';
 export { displace } from './operations/displace.js';
+export { mirror } from './operations/mirror.js';
 export type { ArrayTarget, ArrayCopy } from './ArrayTarget.js';
 export { displacementArray } from './operations/displacementArray.js';
 export { rotationArray } from './operations/rotationArray.js';

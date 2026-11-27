@@ -14,8 +14,9 @@ function chordDistance(point: ReadonlyVec3, start: ReadonlyVec3, end: ReadonlyVe
   return vec3.distance(point, vec3.scaleAndAdd([0, 0, 0], start, direction, t));
 }
 
-/** Conforming adaptive tessellation of retained UV polygons; no topological facets. */
-export function regionMesh(region: SurfaceRegion, context: Tessellation): Float32Array {
+/** Conforming adaptive tessellation of retained UV polygons; the optional visitor preserves native UVs for analysis. */
+export function regionMesh(region: SurfaceRegion, context: Tessellation,
+  onTriangle?: (vertices: readonly { uv: Point; point: Vertex }[]) => void): Float32Array {
   const output: number[] = [];
   for (const chart of region.regions) {
     const uses = [chart.outer, ...(chart.holes ?? [])];
@@ -132,6 +133,7 @@ export function regionMesh(region: SurfaceRegion, context: Tessellation): Float3
       const triangle = ids.map(id => Array.from(points[id].point.position, Math.fround) as vec3);
       if (vec3.length(vec3.cross([0, 0, 0], vec3.subtract([0, 0, 0], triangle[1], triangle[0]),
         vec3.subtract([0, 0, 0], triangle[2], triangle[0]))) === 0) continue;
+      onTriangle?.(ids.map(id => points[id]));
       for (const id of ids) output.push(...Array.from(points[id].point.position));
     }
   }

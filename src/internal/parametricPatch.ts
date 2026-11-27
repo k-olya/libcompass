@@ -9,6 +9,8 @@ import type { Vertex } from '../Vertex.js';
 import { orientLoop } from './boundaryLoops.js';
 import { parameterizedSamples } from './curveSamples.js';
 import { containsPoint } from './polygon.js';
+import { regionMesh } from './regionMesh.js';
+import { Tessellation } from './Tessellation.js';
 
 export type PatchPath = SurfaceTrim & { physical: boolean };
 export type PatchTriangle = { uv: Point[]; points: ReadonlyVec3[]; min: number[]; max: number[] };
@@ -73,6 +75,16 @@ export class ParametricPatch {
       if (!boundary) { boundary = new SpatialCurve({ at: t => ({ position: this.at(at(t)).position }) }); seams.set(key, boundary); }
       this.paths.push({ boundary, at, physical: false });
     }
+    const triangle = (uv: Point[], points: ReadonlyVec3[]): void => {
+      if (vec3.length(vec3.cross([0, 0, 0], vec3.subtract([0, 0, 0], points[1], points[0]), vec3.subtract([0, 0, 0], points[2], points[0]))) < 1e-20) return;
+      this.triangles.push({ uv, points, min: [0, 1, 2].map(k => Math.min(...points.map(p => p[k]))), max: [0, 1, 2].map(k => Math.max(...points.map(p => p[k]))) });
+    };
+    if (source instanceof SurfaceRegion) {
+      // Discarded chart regions are not intersection supports. Retain their
+      // tessellation's native UVs for discovery, then refine on the equations.
+      regionMesh(source, new Tessellation(), vertices => triangle(vertices.map(vertex => vertex.uv), vertices.map(vertex => vertex.point.position)));
+      return;
+    }
     const grid = this.surface.sample();
     const u = new Set(grid.u), v = new Set(grid.v);
     if (source instanceof SpatialSurface) for (const [name, boundary] of Object.entries(source.sides)) if (boundary) {
@@ -84,8 +96,7 @@ export class ParametricPatch {
       const corners = [{ x: us[i - 1], y: vs[j - 1] }, { x: us[i], y: vs[j - 1] }, { x: us[i], y: vs[j] }, { x: us[i - 1], y: vs[j] }];
       for (const indices of [[0, 1, 2], [0, 2, 3]]) {
         const uv = indices.map(k => corners[k]), points = uv.map(p => this.at(p).position);
-        if (vec3.length(vec3.cross([0, 0, 0], vec3.subtract([0, 0, 0], points[1], points[0]), vec3.subtract([0, 0, 0], points[2], points[0]))) < 1e-20) continue;
-        this.triangles.push({ uv, points, min: [0, 1, 2].map(k => Math.min(...points.map(p => p[k]))), max: [0, 1, 2].map(k => Math.max(...points.map(p => p[k]))) });
+        triangle(uv, points);
       }
     }
   }

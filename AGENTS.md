@@ -249,6 +249,10 @@
   periodic chart pieces; internal chart seams are not physical boundaries.
   Preserve source sampling overrides and split curves only at topological events,
   not at discovery stations. Trimmed results must remain usable in later booleans.
+  Discover intersections on a SurfaceRegion's retained UV regions, including holes
+  and disconnected charts, rather than its discarded underlying surface. Reuse
+  native UVs from retained-region tessellation and refine against source equations;
+  discarded tool extensions must not cause false branching or tangency errors.
   Tessellate retained regions with a curvature-aware parameter metric: preserve
   long triangles along straight surface directions instead of refining them to
   match curved directions. Intersection discovery stations are sampling checks,

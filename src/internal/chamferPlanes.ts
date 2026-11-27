@@ -72,13 +72,18 @@ export function chamferPlanar(solid: Solid, selected: readonly Edge[], length: n
     const directions = edges.map(edge => sub((edge.start === vertex ? edge.end : edge.start).position, vertex.position));
     const [d1, d2] = directions, aa = vec3.dot(d1, d1), ab = vec3.dot(d1, d2), bb = vec3.dot(d2, d2), determinant = aa * bb - ab * ab;
     if (determinant < aa * bb * 1e-12) throw new RangeError('Chamfer corner has singular face directions');
+    const tangent = unit(sub(edges[0].end.position, edges[0].start.position));
+    const inward = graph.placement(face, edges[0]).inward(face.plane.toLocal(vertex), tangent);
+    // Reflex face corners retain the complement of the outgoing edge wedge.
+    const reflex = vec3.dot(inward, d2) < 0;
     const coordinates = (point: Vertex) => {
       const d = sub(point.position, vertex.position), x = vec3.dot(d, d1), y = vec3.dot(d, d2);
       return [(bb * x - ab * y) / determinant, (aa * y - ab * x) / determinant];
     };
     const points = candidates(face.plane, vertex, [...corner.faces.filter(other => other !== face).map(other => other.plane), ...corner.cuts.map(cut => cut.plane)], point => {
       const [x, y] = coordinates(point);
-      return x >= -1e-9 && y >= -1e-9 && corner.cuts.every(cut => cut.sense * distance(cut.plane, point.position) <= tolerance);
+      const retained = reflex ? x <= 1e-9 || y <= 1e-9 : x >= -1e-9 && y >= -1e-9;
+      return retained && corner.cuts.every(cut => cut.sense * distance(cut.plane, point.position) <= tolerance);
     }).sort((a, b) => { const x = coordinates(a), y = coordinates(b); return Math.atan2(x[1], x[0]) - Math.atan2(y[1], y[0]); });
     const entries = paths.get(face) ?? new Map(); entries.set(vertex, { edges, points }); paths.set(face, entries);
   }
@@ -118,9 +123,10 @@ export function chamferPlanar(solid: Solid, selected: readonly Edge[], length: n
       const corner = corners.get(vertex)!, cap = corner.faces.find(face => !cut.faces.includes(face))!;
       const toward = sub((cut.edge.start === vertex ? cut.edge.end : cut.edge.start).position, vertex.position);
       const first = end(a, cut.edge, vertex), last = end(b, cut.edge, vertex), across = sub(last.position, first.position);
+      // Connected bevels can extend past the old end plane to meet their shared miter.
       const points = candidates(cut.plane, vertex, [...corner.faces.map(face => face.plane), ...corner.cuts.filter(other => other !== cut).map(other => other.plane)], point =>
         cut.faces.every(face => cut.sense * distance(face.plane, point.position) <= tolerance)
-        && distance(cap.plane, point.position) * vec3.dot(cap.plane.normal, toward) >= -tolerance
+        && (corner.cuts.length > 1 || distance(cap.plane, point.position) * vec3.dot(cap.plane.normal, toward) >= -tolerance)
         && corner.cuts.filter(other => other !== cut).every(other => other.sense * distance(other.plane, point.position) <= tolerance));
       points.sort((p, q) => vec3.dot(sub(p.position, q.position), across));
       if (points[0] !== first || points.at(-1) !== last) throw new RangeError('Chamfer corner cannot join its support contacts');

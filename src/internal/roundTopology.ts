@@ -97,7 +97,7 @@ export class RoundTopology {
     };
     const areas = loops.map(area), material = (areas[0] ?? 0) - areas.slice(1).reduce((a, b) => a + b, 0);
     const tolerance = this.tolerance * Math.max(1, Math.sqrt(areas[0] ?? 0));
-    if (material < -tolerance) throw new RangeError('Round radius consumes or inverts a face');
+    if (material < -tolerance) throw new RangeError('Blend size consumes or inverts a face; opposing trims overlap');
     if (material <= tolerance) return undefined;
     return new Face({ plane: source.plane, outer: loops[0], holes: loops.slice(1).filter((_, i) => areas[i + 1] > tolerance) });
   }
